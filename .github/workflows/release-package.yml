@@ -2,6 +2,7 @@ name: Release Package
 on:
   release:
     types: [created]
+
 jobs:
   package:
     runs-on: ubuntu-latest
@@ -12,13 +13,17 @@ jobs:
       with:
         python-version: "3.11"
     - name: Package Skill
-      run: python scripts/package_skill.py
+      run: |
+        # Dynamically derive package name from tag
+        TAG_NAME=${{ github.ref_name }}
+        PACKAGE_NAME="rup-skill-${TAG_NAME}.zip"
+        python scripts/package_skill.py --version "${TAG_NAME}" --output "dist/${PACKAGE_NAME}"
     - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./dist/rup-skill-v3.0.0.zip
-        asset_name: rup-skill-v3.0.0.zip
+        asset_path: ./dist/rup-skill-${{ github.ref_name }}.zip
+        asset_name: rup-skill-${{ github.ref_name }}.zip
         asset_content_type: application/zip

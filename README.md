@@ -38,7 +38,7 @@ To trigger the skill via your agent platform, instruct it to load `SKILL.md` as 
 
 ```bash
 # Example: Run the RUP discovery phase on a target repository
-python3 -m runtime.cli discovery /path/to/target-repo
+python3 -m runtime.cli discovery --target /path/to/target-repo
 ```
 
 ## Installation

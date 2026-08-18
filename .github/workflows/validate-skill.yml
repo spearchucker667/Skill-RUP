@@ -12,4 +12,4 @@ jobs:
     - name: Install dependencies
       run: pip install pyyaml jsonschema
     - name: Run validate_rup.py
-      run: python scripts/validate_rup.py all .
+      run: python scripts/validate_rup.py all . --schema protocol/rup-schema.json

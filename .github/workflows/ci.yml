@@ -1,8 +1,12 @@
 name: CI
 on: [push, pull_request]
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python
@@ -16,4 +20,4 @@ jobs:
     - name: Run Build Capability Map Check
       run: python scripts/build_capability_map.py --check
     - name: Run RUP Validation
-      run: python scripts/validate_rup.py all .
+      run: python scripts/validate_rup.py all . --schema protocol/rup-schema.json

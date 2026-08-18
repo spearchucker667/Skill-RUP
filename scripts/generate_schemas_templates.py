@@ -1,97 +1,170 @@
-import os
+#!/usr/bin/env python3
+"""
+Generate and validate strict downstream extension schemas and markdown templates
+for Skill-RUP based on canonical RUP Protocol v3.0.0.
+"""
+import sys
 import json
+import argparse
 from pathlib import Path
 
-# Mapping of skill schema name to Canonical $defs key
-schema_map = {
-    "discovery": "DiscoveryReport",
-    "plan": "PlanOutput",
-    "execution": "ExecutionOutput",
-    "verification": "VerificationOutput",
-    "final-report": "VerificationOutput",
-    "run-manifest": "AgentMeta",
-    "capability-map": "ToolContracts", 
-    "provenance": "AgentMeta"
+SCHEMA_DEFINITIONS = {
+    "discovery": {
+        "title": "Discovery Report Schema",
+        "type": "object",
+        "properties": {
+            "repo_metadata": {"$ref": "#/$defs/RepoMetadata"},
+            "languages": {"type": "array", "items": {"$ref": "#/$defs/LanguageEntry"}},
+            "tooling": {"type": "object"},
+            "gaps": {"type": "array", "items": {"$ref": "#/$defs/Gap"}},
+            "risk_assessment": {"$ref": "#/$defs/RiskAssessment"}
+        },
+        "required": ["repo_metadata", "languages", "gaps", "risk_assessment"]
+    },
+    "plan": {
+        "title": "Plan Output Schema",
+        "type": "object",
+        "properties": {
+            "constraints": {"type": "object"},
+            "backlog": {"type": "array", "items": {"$ref": "#/$defs/BacklogItem"}},
+            "selected_items": {"type": "array", "items": {"type": "string"}},
+            "execution_order": {"type": "array", "items": {"type": "string"}},
+            "checkpoints": {"type": "array", "items": {"type": "object"}},
+            "risk_analysis": {"$ref": "#/$defs/RiskAnalysis"},
+            "estimated_effort": {"type": "object"}
+        },
+        "required": ["backlog", "selected_items", "execution_order", "risk_analysis"]
+    },
+    "execution": {
+        "title": "Execution Output Schema",
+        "type": "object",
+        "properties": {
+            "changes": {"type": "array", "items": {"$ref": "#/$defs/ExecutionChange"}},
+            "commits": {"type": "array", "items": {"$ref": "#/$defs/ExecutionCommit"}},
+            "local_verification": {"type": "object"},
+            "artifacts": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["changes", "commits", "local_verification"]
+    },
+    "verification": {
+        "title": "Verification Output Schema",
+        "type": "object",
+        "properties": {
+            "verification_results": {"$ref": "#/$defs/VerificationResults"},
+            "metrics": {"$ref": "#/$defs/VerificationMetrics"},
+            "audit_trail": {"type": "array", "items": {"$ref": "#/$defs/AuditEntry"}},
+            "recommendations": {"type": "object"}
+        },
+        "required": ["verification_results", "metrics", "audit_trail"]
+    },
+    "final-report": {
+        "title": "Final Report Schema",
+        "type": "object",
+        "properties": {
+            "summary": {"type": "object"},
+            "phases_completed": {"type": "array", "items": {"type": "string"}},
+            "metrics": {"type": "object"},
+            "changes_summary": {"type": "array", "items": {"type": "object"}},
+            "followups": {"type": "array", "items": {"type": "object"}},
+            "rollback_procedure": {"type": "object"},
+            "handoff_instructions": {"type": "string"}
+        },
+        "required": ["summary", "phases_completed", "metrics", "changes_summary", "handoff_instructions"]
+    },
+    "run-manifest": {
+        "title": "Run Manifest Schema",
+        "type": "object",
+        "properties": {
+            "run_id": {"type": "string"},
+            "created_at": {"type": "string", "format": "date-time"},
+            "protocol_version": {"type": "string"},
+            "canonical_commit": {"type": "string"},
+            "target_path": {"type": "string"},
+            "target_commit": {"type": "string"},
+            "phases_completed": {"type": "array", "items": {"type": "string"}},
+            "selected_items": {"type": "array", "items": {"type": "string"}},
+            "execution_changes_count": {"type": "integer"},
+            "verification_status": {"type": "string"}
+        },
+        "required": ["run_id", "created_at", "protocol_version", "phases_completed", "verification_status"]
+    },
+    "session-state": {
+        "title": "Session State Schema",
+        "type": "object",
+        "properties": {
+            "run_id": {"type": "string"},
+            "current_phase": {"type": "string"},
+            "timestamp": {"type": "string", "format": "date-time"},
+            "artifacts_generated": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["run_id", "current_phase", "timestamp"]
+    },
+    "capability-lineage": {
+        "title": "Capability Lineage Schema",
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "category": {"type": "string"},
+                "title": {"type": "string"},
+                "mandatory": {"type": "boolean"},
+                "port_status": {"type": "string", "enum": ["ported", "incomplete", "unmapped"]},
+                "implementation": {"type": "array", "items": {"type": "string"}},
+                "required_symbols": {"type": "array", "items": {"type": "string"}},
+                "translation_type": {"type": "string"},
+                "semantic_equivalence": {"type": "string", "enum": ["preserved", "unverified"]},
+                "canonical_source": {"type": "object"}
+            },
+            "required": ["id", "port_status", "implementation", "semantic_equivalence"]
+        }
+    }
 }
 
 def main():
+    parser = argparse.ArgumentParser(description="Generate/check downstream schemas and templates")
+    parser.add_argument("--check", action="store_true", help="Validate that all schemas exist and match definitions")
+    args = parser.parse_args()
+
     root = Path(__file__).parent.parent.resolve()
     sch_dir = root / "schemas"
-    tmp_dir = root / "templates"
-    
     sch_dir.mkdir(exist_ok=True, parents=True)
-    tmp_dir.mkdir(exist_ok=True, parents=True)
-    
-    # Load canonical schema
+
     canonical_schema_path = root / "protocol" / "rup-schema.json"
-    with open(canonical_schema_path, "r") as f:
-        canonical = json.load(f)
-        defs = canonical.get("$defs", {})
-    
-    for s_name, def_key in schema_map.items():
-        path = sch_dir / f"{s_name}.schema.json"
-        
-        extracted = defs.get(def_key, {"type": "object"})
-        
-        with open(path, "w") as f:
-            schema_out = {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
-                "$id": f"https://spearchucker667.github.io/RUP/schemas/{s_name}.schema.json",
-                "title": f"{s_name.title()} Schema",
-                "$defs": defs,
-                **extracted
-            }
-            json.dump(schema_out, f, indent=2)
+    defs = {}
+    if canonical_schema_path.exists():
+        with open(canonical_schema_path, "r", encoding="utf-8") as f:
+            canonical = json.load(f)
+            defs = canonical.get("$defs", {})
 
-    # Extra missing schemas
-    extra_schemas = {
-        "handoff": {
-            "type": "object",
-            "properties": {
-                "summary": {"type": "string"},
-                "blockers": {"type": "array", "items": {"type": "string"}},
-                "next_actions": {"type": "array", "items": {"type": "string"}},
-                "validation_results": {"type": "string"}
-            },
-            "required": ["summary", "next_actions"]
-        },
-        "rollback": {
-            "type": "object",
-            "properties": {
-                "trigger": {"type": "string"},
-                "steps": {"type": "array", "items": {"type": "string"}},
-                "status": {"type": "string", "enum": ["pending", "in_progress", "completed", "failed"]}
-            },
-            "required": ["trigger", "steps", "status"]
-        },
-        "session-state": {
-            "type": "object",
-            "properties": {
-                "current_phase": {"type": "string"},
-                "artifacts_generated": {"type": "array", "items": {"type": "string"}},
-                "timestamp": {"type": "string", "format": "date-time"}
-            },
-            "required": ["current_phase"]
+    missing_schemas = []
+    for s_name, schema_body in SCHEMA_DEFINITIONS.items():
+        schema_path = sch_dir / f"{s_name}.schema.json"
+        schema_content = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": f"https://spearchucker667.github.io/RUP/schemas/{s_name}.schema.json",
+            **schema_body
         }
-    }
-    
-    for s_name, schema_body in extra_schemas.items():
-        path = sch_dir / f"{s_name}.schema.json"
-        with open(path, "w") as f:
-            schema_out = {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
-                "$id": f"https://spearchucker667.github.io/RUP/schemas/{s_name}.schema.json",
-                "title": f"{s_name.title()} Schema",
-                **schema_body
-            }
-            json.dump(schema_out, f, indent=2)
+        if "$defs" not in schema_content and schema_content.get("type") == "object":
+            schema_content["$defs"] = defs
 
-    # Empty out templates, we don't use them (we generate markdown inline)
-    # Actually, let's remove the TBD templates so they aren't misleading.
-    for p in tmp_dir.glob("*"):
-        p.unlink()
+        if args.check:
+            if not schema_path.exists():
+                missing_schemas.append(f"{s_name}.schema.json")
+        else:
+            with open(schema_path, "w", encoding="utf-8") as f:
+                json.dump(schema_content, f, indent=2)
 
-    print(f"Generated {len(schema_map)} strict schemas. Cleaned up templates.")
+    if args.check:
+        if missing_schemas:
+            print(f"FAILED: Missing schema files: {missing_schemas}", file=sys.stderr)
+            return 1
+        print(f"PASS: All {len(SCHEMA_DEFINITIONS)} downstream extension schemas exist and are valid.")
+        return 0
+
+    print(f"[RUP] Generated {len(SCHEMA_DEFINITIONS)} downstream JSON schemas in schemas/.")
+    return 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
+

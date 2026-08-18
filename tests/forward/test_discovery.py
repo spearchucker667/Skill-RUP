@@ -17,9 +17,9 @@ def test_discovery_execution(tmp_path):
     # Run the discovery phase CLI
     run_discovery(repo_dir)
     
-    # Verify the artifacts were generated
-    assert (repo_dir / "RUP_DISCOVERY.json").exists()
-    assert (repo_dir / "RUP_DISCOVERY.md").exists()
+    # Verify the artifacts were generated in .rup/ directory
+    assert (repo_dir / ".rup" / "RUP_DISCOVERY.json").exists()
+    assert (repo_dir / ".rup" / "RUP_DISCOVERY.md").exists()
     
     # Load and verify the contents
     paths = RupPaths(repo_dir)
@@ -39,7 +39,7 @@ def test_discovery_execution(tmp_path):
     result = subprocess.run([
         "python3", str(script_path), 
         "--schema", str(schema_path),
-        "output", str(repo_dir / "RUP_DISCOVERY.json"), "discovery"
+        "output", str(repo_dir / ".rup" / "RUP_DISCOVERY.json"), "discovery"
     ], capture_output=True, text=True)
     
     assert result.returncode == 0, f"Schema validation failed: {result.stdout} {result.stderr}"

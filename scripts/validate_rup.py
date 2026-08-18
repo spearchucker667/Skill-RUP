@@ -91,15 +91,27 @@ def colorize(text: str, color: str) -> str:
 
 def load_schema(schema_path: Optional[Path] = None) -> Dict[str, Any]:
     """Load the RUP JSON Schema."""
-    if schema_path is None:
-        # Look for schema one level above (repo root)
-        schema_path = Path(__file__).parent.parent / "rup-schema.json"
-    
-    if not schema_path.exists():
-        raise FileNotFoundError(f"Schema not found: {schema_path}")
-    
-    with open(schema_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    if schema_path is not None:
+        p = Path(schema_path)
+        if p.exists():
+            with open(p, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        raise FileNotFoundError(f"Schema not found: {p}")
+
+    # Check candidate paths in order of preference
+    repo_root = Path(__file__).parent.parent.resolve()
+    candidates = [
+        repo_root / "protocol" / "rup-schema.json",
+        repo_root / "rup-schema.json",
+        Path.cwd() / "protocol" / "rup-schema.json",
+        Path.cwd() / "rup-schema.json",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            with open(candidate, 'r', encoding='utf-8') as f:
+                return json.load(f)
+
+    raise FileNotFoundError(f"Schema not found. Searched: {[str(c) for c in candidates]}")
 
 
 def load_yaml(file_path: Path) -> Dict[str, Any]:
@@ -161,6 +173,8 @@ def validate_protocol(
             if m:
                 expected_version = m.group(1)
 
+    format_checker = Draft202012Validator.FORMAT_CHECKER
+
     if expected_version and 'schema_version' in protocol_data:
         version = protocol_data['schema_version']
         if version != expected_version:
@@ -171,12 +185,12 @@ def validate_protocol(
                 instance=version,
                 schema_path=["properties", "schema_version"]
             )
-            validator = Draft202012Validator(schema)
+            validator = Draft202012Validator(schema, format_checker=format_checker)
             errors = list(validator.iter_errors(protocol_data))
             errors.insert(0, error)
             return False, errors
 
-    validator = Draft202012Validator(schema)
+    validator = Draft202012Validator(schema, format_checker=format_checker)
     errors = list(validator.iter_errors(protocol_data))
     return len(errors) == 0, errors
 
@@ -210,7 +224,8 @@ def validate_agent_output(
         "$defs": schema.get("$defs", {})
     }
     
-    validator = Draft202012Validator(wrapper_schema)
+    format_checker = Draft202012Validator.FORMAT_CHECKER
+    validator = Draft202012Validator(wrapper_schema, format_checker=format_checker)
     
     errors = list(validator.iter_errors(output_data))
     return len(errors) == 0, errors
@@ -300,50 +315,54 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
     
     results = []
     parse_errors = 0  # Track files that failed to parse
-    
-    # Find and validate protocol files
-    for yaml_file in directory.glob("**/*.yaml"):
-        if any(p in yaml_file.parts for p in [".reference", "schemas", "development", "legacy"]): continue
-        if "protocol" in yaml_file.name.lower():
+    seen_files = set()
+    ignored_parts = {".reference", "schemas", "development", "legacy", ".git", ".venv", "node_modules"}
+
+    # Walk directory to find matching files case-insensitively
+    for file_path in directory.rglob("*"):
+        if not file_path.is_file():
+            continue
+        if any(p in file_path.parts for p in ignored_parts):
+            continue
+
+        resolved_str = str(file_path.resolve())
+        if resolved_str in seen_files:
+            continue
+
+        fname_lower = file_path.name.lower()
+
+        # Validate protocol files
+        if fname_lower.endswith((".yaml", ".yml")) and "protocol" in fname_lower:
+            seen_files.add(resolved_str)
             try:
-                protocol = load_yaml(yaml_file)
+                protocol = load_yaml(file_path)
                 valid, errors = validate_protocol(protocol, schema)
-                results.append((yaml_file, valid, errors))
+                results.append((file_path, valid, errors))
             except Exception as e:
-                print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {yaml_file}: {e}")
+                print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {file_path}: {e}")
                 parse_errors += 1
-    
-    for yml_file in directory.glob("**/*.yml"):
-        if any(p in yml_file.parts for p in [".reference", "schemas", "development", "legacy"]): continue
-        if "protocol" in yml_file.name.lower():
-            try:
-                protocol = load_yaml(yml_file)
-                valid, errors = validate_protocol(protocol, schema)
-                results.append((yml_file, valid, errors))
-            except Exception as e:
-                print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {yml_file}: {e}")
-                parse_errors += 1
-    
-    # Find and validate output files
-    output_patterns = [
-        ("discovery", "**/discovery*.json"),
-        ("plan", "**/plan*.json"),
-        ("execution", "**/execution*.json"),
-        ("execution", "**/changes*.json"),
-        ("verification", "**/verification*.json"),
-        ("verification", "**/report*.json"),
-    ]
-    
-    for output_type, pattern in output_patterns:
-        for json_file in directory.glob(pattern):
-            if any(p in json_file.parts for p in [".reference", "schemas", "development", "legacy"]): continue
-            try:
-                output = load_json(json_file)
-                valid, errors = validate_agent_output(output, output_type, schema)
-                results.append((json_file, valid, errors))
-            except Exception as e:
-                print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {json_file}: {e}")
-                parse_errors += 1
+
+        # Validate output JSON files
+        elif fname_lower.endswith(".json"):
+            output_type = None
+            if "discovery" in fname_lower:
+                output_type = "discovery"
+            elif "plan" in fname_lower:
+                output_type = "plan"
+            elif "execution" in fname_lower or "changes" in fname_lower:
+                output_type = "execution"
+            elif "verification" in fname_lower:
+                output_type = "verification"
+
+            if output_type:
+                seen_files.add(resolved_str)
+                try:
+                    output = load_json(file_path)
+                    valid, errors = validate_agent_output(output, output_type, schema)
+                    results.append((file_path, valid, errors))
+                except Exception as e:
+                    print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {file_path}: {e}")
+                    parse_errors += 1
     
     # Print results
     if not results:

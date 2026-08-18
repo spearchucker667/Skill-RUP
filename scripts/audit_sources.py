@@ -6,7 +6,7 @@ from datetime import datetime
 import hashlib
 
 def main():
-    root = Path("/Users/super_user/Projects/Skill-RUP")
+    root = Path(__file__).parent.parent.resolve()
     ref_dir = root / ".reference"
     hash_file = root / "development" / "source-audit" / "reference-sha256.txt"
     manifest_path = root / "provenance" / "source-manifest.json"

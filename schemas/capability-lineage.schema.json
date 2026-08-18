@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spearchucker667.github.io/RUP/schemas/capability-lineage.schema.json",
+  "title": "Capability Lineage Schema",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "category": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "mandatory": {
+        "type": "boolean"
+      },
+      "port_status": {
+        "type": "string",
+        "enum": [
+          "ported",
+          "incomplete",
+          "unmapped"
+        ]
+      },
+      "implementation": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "required_symbols": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "translation_type": {
+        "type": "string"
+      },
+      "semantic_equivalence": {
+        "type": "string",
+        "enum": [
+          "preserved",
+          "unverified"
+        ]
+      },
+      "canonical_source": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "id",
+      "port_status",
+      "implementation",
+      "semantic_equivalence"
+    ]
+  }
+}

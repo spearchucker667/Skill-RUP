@@ -98,15 +98,25 @@ function printInfo(message) {
  * @throws {Error} If the schema file is not found.
  */
 function loadSchema(schemaPath) {
-    if (!schemaPath) {
-        schemaPath = path.join(__dirname, '..', 'rup-schema.json');
+    if (schemaPath && fs.existsSync(schemaPath)) {
+        return JSON.parse(readFileWithLimit(schemaPath));
     }
 
-    if (!fs.existsSync(schemaPath)) {
-        throw new Error(`Schema not found: ${schemaPath}`);
+    const candidates = [
+        schemaPath,
+        path.join(__dirname, '..', 'protocol', 'rup-schema.json'),
+        path.join(__dirname, '..', 'rup-schema.json'),
+        path.join(process.cwd(), 'protocol', 'rup-schema.json'),
+        path.join(process.cwd(), 'rup-schema.json')
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+            return JSON.parse(readFileWithLimit(candidate));
+        }
     }
 
-    return JSON.parse(readFileWithLimit(schemaPath));
+    throw new Error(`Schema not found. Searched: ${candidates.join(', ')}`);
 }
 
 // Load YAML file
@@ -324,9 +334,10 @@ function validateAll(directory, schemaPath) {
     console.log('═'.repeat(50));
 
     const results = [];
+    const ignoreList = ['**/.reference/**', '**/development/**', '**/legacy/**', '**/schemas/**', '**/node_modules/**', '**/.git/**', '**/.venv/**'];
 
     // Find protocol files
-    const protocolFiles = glob.sync(`${directory}/**/*protocol*.{yaml,yml}`, { nodir: true });
+    const protocolFiles = glob.sync(`${directory}/**/*protocol*.{yaml,yml}`, { nodir: true, ignore: ignoreList, nocase: true });
     protocolFiles.forEach(file => {
         const result = validateProtocol(file, schemaPath);
         results.push({ file, ...result });
@@ -334,19 +345,22 @@ function validateAll(directory, schemaPath) {
 
     // Find output files
     const outputPatterns = [
-        { type: 'discovery', pattern: '**/discovery*.json' },
-        { type: 'plan', pattern: '**/plan*.json' },
-        { type: 'execution', pattern: '**/execution*.json' },
-        { type: 'execution', pattern: '**/changes*.json' },
-        { type: 'verification', pattern: '**/verification*.json' },
-        { type: 'verification', pattern: '**/report*.json' }
+        { type: 'discovery', pattern: '**/*discovery*.json' },
+        { type: 'plan', pattern: '**/*plan*.json' },
+        { type: 'execution', pattern: '**/*execution*.json' },
+        { type: 'execution', pattern: '**/*changes*.json' },
+        { type: 'verification', pattern: '**/*verification*.json' }
     ];
 
+    const seenOutputs = new Set();
     outputPatterns.forEach(({ type, pattern }) => {
-        const files = glob.sync(`${directory}/${pattern}`, { nodir: true });
+        const files = glob.sync(`${directory}/${pattern}`, { nodir: true, ignore: ignoreList, nocase: true });
         files.forEach(file => {
-            const result = validateOutput(file, type, schemaPath);
-            results.push({ file, type, ...result });
+            if (!seenOutputs.has(file)) {
+                seenOutputs.add(file);
+                const result = validateOutput(file, type, schemaPath);
+                results.push({ file, type, ...result });
+            }
         });
     });
 

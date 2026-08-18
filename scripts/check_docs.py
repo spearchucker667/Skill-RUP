@@ -44,20 +44,30 @@ def main():
         if not (root / req).exists():
             errors.append(f"Missing required file: {req}")
 
-    # 2. Check for forbidden strings
-    for md_file in root.rglob("*.md"):
-        if any(ignored in md_file.parts for ignored in [".reference", "node_modules", "development", ".work orders"]):
-            continue
-        if md_file.name.startswith("SKILL_RUP_GITHUB_DOCS"):
-            continue
+    # 2. Check for forbidden strings in markdown and Python files
+    scan_extensions = ["*.md", "*.py"]
+    scan_dirs = ["", "scripts", "runtime", "tests"]  # root and specific directories
+    
+    for pattern in scan_extensions:
+        for file_path in root.rglob(pattern):
+            # Skip ignored directories and the check script itself
+            if any(ignored in file_path.parts for ignored in [".reference", "node_modules", "development", ".work orders", ".git", ".venv", "__pycache__"]):
+                continue
+            if file_path.name.startswith("SKILL_RUP_GITHUB_DOCS"):
+                continue
+            if file_path.name == "check_docs.py":
+                continue
+            # Skip known false positives (legitimate use of the word "placeholder")
+            if file_path.name == "planning.py":
+                continue
             
-        try:
-            content = md_file.read_text(encoding="utf-8")
-            for fb in FORBIDDEN_STRINGS:
-                if fb in content:
-                    errors.append(f"Forbidden string '{fb}' found in {md_file.relative_to(root)}")
-        except Exception as e:
-            errors.append(f"Could not read {md_file.relative_to(root)}: {e}")
+            try:
+                content = file_path.read_text(encoding="utf-8")
+                for fb in FORBIDDEN_STRINGS:
+                    if fb in content:
+                        errors.append(f"Forbidden string '{fb}' found in {file_path.relative_to(root)}")
+            except Exception as e:
+                errors.append(f"Could not read {file_path.relative_to(root)}: {e}")
 
     if errors:
         print("Documentation validation failed:")

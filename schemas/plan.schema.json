@@ -1,7 +1,49 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spearchucker667.github.io/RUP/schemas/plan.schema.json",
-  "title": "Plan Output",
+  "title": "Plan Output Schema",
+  "type": "object",
+  "properties": {
+    "constraints": {
+      "type": "object"
+    },
+    "backlog": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BacklogItem"
+      }
+    },
+    "selected_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "execution_order": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "checkpoints": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "risk_analysis": {
+      "$ref": "#/$defs/RiskAnalysis"
+    },
+    "estimated_effort": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "backlog",
+    "selected_items",
+    "execution_order",
+    "risk_analysis"
+  ],
   "$defs": {
     "Metadata": {
       "type": "object",
@@ -2456,89 +2498,5 @@
       },
       "additionalProperties": false
     }
-  },
-  "description": "Schema for planning_agent output",
-  "type": "object",
-  "required": [
-    "backlog",
-    "selected_items",
-    "execution_order",
-    "estimated_effort"
-  ],
-  "properties": {
-    "meta": {
-      "$ref": "#/$defs/AgentMeta"
-    },
-    "backlog": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/BacklogItem"
-      }
-    },
-    "selected_items": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "execution_order": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "risk_analysis": {
-      "type": "object",
-      "properties": {
-        "breaking_changes_possible": {
-          "type": "boolean"
-        },
-        "requires_manual_review": {
-          "type": "boolean"
-        },
-        "rollback_complexity": {
-          "type": "string",
-          "enum": [
-            "trivial",
-            "moderate",
-            "complex"
-          ]
-        },
-        "affected_packages": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "estimated_effort": {
-      "type": "object",
-      "required": [
-        "total_minutes",
-        "confidence"
-      ],
-      "properties": {
-        "total_minutes": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "confidence": {
-          "type": "string",
-          "enum": [
-            "low",
-            "medium",
-            "high"
-          ]
-        },
-        "breakdown": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "integer"
-          }
-        }
-      }
-    }
-  },
-  "additionalProperties": false
+  }
 }

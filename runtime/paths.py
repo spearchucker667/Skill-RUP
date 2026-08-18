@@ -1,17 +1,22 @@
 """
-paths module for RUP deterministic runtime.
+Path resolution and jail enforcement for RUP runtime.
 """
 from pathlib import Path
+from typing import Optional
 from .security import enforce_path_jail
 
 class RupPaths:
-    def __init__(self, target_dir: Path):
-        # The agent skill is installed wherever this runtime module is located
+    def __init__(self, target_dir: Path, state_dir: Optional[Path] = None):
         self.skill_root = Path(__file__).parent.parent.resolve()
         self.target_dir = target_dir.resolve()
         
         if not self.target_dir.is_dir():
             raise NotADirectoryError(f"Target directory not found: {self.target_dir}")
+
+        if state_dir is not None:
+            self.state_dir = state_dir.resolve()
+        else:
+            self.state_dir = self.target_dir / ".rup"
 
     def get_skill_path(self, *subpaths) -> Path:
         """Resolve a path within the skill's own directory (e.g. protocol/)."""
@@ -22,6 +27,12 @@ class RupPaths:
         """Resolve a path within the target user repository."""
         target = self.target_dir.joinpath(*subpaths)
         return enforce_path_jail(self.target_dir, target)
+
+    def get_state_path(self, *subpaths) -> Path:
+        """Resolve a path within the controlled state directory (.rup/)."""
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        target = self.state_dir.joinpath(*subpaths)
+        return enforce_path_jail(self.state_dir, target)
         
     @property
     def protocol_dir(self) -> Path:
@@ -34,3 +45,4 @@ class RupPaths:
     @property
     def templates_dir(self) -> Path:
         return self.get_skill_path("templates")
+

@@ -1,7 +1,47 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spearchucker667.github.io/RUP/schemas/final-report.schema.json",
-  "title": "Verification Output",
+  "title": "Final Report Schema",
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "object"
+    },
+    "phases_completed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "metrics": {
+      "type": "object"
+    },
+    "changes_summary": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "followups": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "rollback_procedure": {
+      "type": "object"
+    },
+    "handoff_instructions": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "summary",
+    "phases_completed",
+    "metrics",
+    "changes_summary",
+    "handoff_instructions"
+  ],
   "$defs": {
     "Metadata": {
       "type": "object",
@@ -2456,64 +2496,5 @@
       },
       "additionalProperties": false
     }
-  },
-  "description": "Schema for verification_agent output",
-  "type": "object",
-  "required": [
-    "verification_results",
-    "metrics",
-    "recommendations"
-  ],
-  "properties": {
-    "meta": {
-      "$ref": "#/$defs/AgentMeta"
-    },
-    "verification_results": {
-      "type": "object",
-      "required": [
-        "overall_status"
-      ],
-      "properties": {
-        "overall_status": {
-          "type": "string",
-          "enum": [
-            "passed",
-            "passed_with_warnings",
-            "failed"
-          ]
-        },
-        "tests": {
-          "$ref": "#/$defs/TestResults"
-        },
-        "lint": {
-          "$ref": "#/$defs/LintResults"
-        },
-        "security": {
-          "$ref": "#/$defs/SecurityResults"
-        },
-        "build": {
-          "$ref": "#/$defs/BuildResults"
-        },
-        "type_check": {
-          "$ref": "#/$defs/TypeCheckResults"
-        }
-      }
-    },
-    "metrics": {
-      "$ref": "#/$defs/MetricsOutput"
-    },
-    "audit_trail": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/AuditEntry"
-      }
-    },
-    "recommendations": {
-      "$ref": "#/$defs/Recommendations"
-    },
-    "final_report": {
-      "type": "string"
-    }
-  },
-  "additionalProperties": false
+  }
 }

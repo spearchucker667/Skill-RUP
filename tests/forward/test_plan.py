@@ -16,8 +16,8 @@ def test_plan_execution(tmp_path):
     # Run plan
     run_plan(repo_dir)
     
-    assert (repo_dir / "RUP_PLAN.json").exists()
-    assert (repo_dir / "RUP_PLAN.md").exists()
+    assert (repo_dir / ".rup" / "RUP_PLAN.json").exists()
+    assert (repo_dir / ".rup" / "RUP_PLAN.md").exists()
     
     paths = RupPaths(repo_dir)
     state = StateManager(paths)
@@ -33,7 +33,7 @@ def test_plan_execution(tmp_path):
     result = subprocess.run([
         "python3", str(script_path), 
         "--schema", str(schema_path),
-        "output", str(repo_dir / "RUP_PLAN.json"), "plan"
+        "output", str(repo_dir / ".rup" / "RUP_PLAN.json"), "plan"
     ], capture_output=True, text=True)
     
     assert result.returncode == 0, f"Schema validation failed: {result.stdout} {result.stderr}"

@@ -13,8 +13,8 @@ def test_execute_execution(tmp_path):
     run_plan(repo_dir)
     run_execute(repo_dir)
     
-    assert (repo_dir / "RUP_EXECUTION.json").exists()
-    assert (repo_dir / "RUP_EXECUTION.md").exists()
+    assert (repo_dir / ".rup" / "RUP_EXECUTION.json").exists()
+    assert (repo_dir / ".rup" / "RUP_EXECUTION.md").exists()
     
     script_path = Path(__file__).parent.parent.parent / "scripts" / "validate_rup.py"
     schema_path = Path(__file__).parent.parent.parent / "protocol" / "rup-schema.json"
@@ -22,7 +22,7 @@ def test_execute_execution(tmp_path):
     result = subprocess.run([
         "python3", str(script_path), 
         "--schema", str(schema_path),
-        "output", str(repo_dir / "RUP_EXECUTION.json"), "execution"
+        "output", str(repo_dir / ".rup" / "RUP_EXECUTION.json"), "execution"
     ], capture_output=True, text=True)
     
     assert result.returncode == 0, f"Schema validation failed: {result.stdout} {result.stderr}"

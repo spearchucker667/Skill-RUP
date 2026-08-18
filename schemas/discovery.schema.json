@@ -1,7 +1,37 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spearchucker667.github.io/RUP/schemas/discovery.schema.json",
-  "title": "Discovery Report Output",
+  "title": "Discovery Report Schema",
+  "type": "object",
+  "properties": {
+    "repo_metadata": {
+      "$ref": "#/$defs/RepoMetadata"
+    },
+    "languages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LanguageEntry"
+      }
+    },
+    "tooling": {
+      "type": "object"
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Gap"
+      }
+    },
+    "risk_assessment": {
+      "$ref": "#/$defs/RiskAssessment"
+    }
+  },
+  "required": [
+    "repo_metadata",
+    "languages",
+    "gaps",
+    "risk_assessment"
+  ],
   "$defs": {
     "Metadata": {
       "type": "object",
@@ -2456,289 +2486,5 @@
       },
       "additionalProperties": false
     }
-  },
-  "description": "Schema for discovery_agent output",
-  "type": "object",
-  "required": [
-    "repo_metadata",
-    "languages",
-    "tooling",
-    "gaps",
-    "risk_assessment"
-  ],
-  "properties": {
-    "meta": {
-      "$ref": "#/$defs/AgentMeta"
-    },
-    "repo_metadata": {
-      "type": "object",
-      "required": [
-        "name",
-        "primary_language",
-        "repo_type",
-        "loc",
-        "file_count"
-      ],
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
-        "primary_language": {
-          "type": "string"
-        },
-        "repo_type": {
-          "type": "string",
-          "enum": [
-            "library",
-            "application",
-            "service",
-            "cli",
-            "monorepo",
-            "unknown"
-          ]
-        },
-        "loc": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "file_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "last_commit_date": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "contributors": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "open_issues": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "open_prs": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "stars": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 0
-        },
-        "license": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "languages": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "percentage"
-        ],
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "percentage": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 100
-          },
-          "package_manager": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "lockfile_present": {
-            "type": "boolean"
-          },
-          "version_detected": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      }
-    },
-    "tooling": {
-      "type": "object",
-      "properties": {
-        "test_framework": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "test_location": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "linter": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "formatter": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "type_checker": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "build_tool": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "ci_platform": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "ci_workflows": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "containerization": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "iac_tool": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "monorepo": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "is_monorepo": {
-          "type": "boolean"
-        },
-        "tool": {
-          "type": "string",
-          "enum": [
-            "nx",
-            "turborepo",
-            "lerna",
-            "bazel",
-            "pnpm",
-            "rush",
-            "custom",
-            "none"
-          ]
-        },
-        "packages": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "path": {
-                "type": "string"
-              },
-              "language": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "app",
-                  "lib",
-                  "service",
-                  "tool"
-                ]
-              }
-            }
-          }
-        }
-      }
-    },
-    "gaps": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/Gap"
-      }
-    },
-    "risk_assessment": {
-      "type": "object",
-      "required": [
-        "overall_risk"
-      ],
-      "properties": {
-        "overall_risk": {
-          "type": "string",
-          "enum": [
-            "low",
-            "medium",
-            "high",
-            "critical"
-          ]
-        },
-        "risk_factors": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "factor": {
-                "type": "string"
-              },
-              "severity": {
-                "type": "string"
-              },
-              "mitigation": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "technical_debt_score": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 100
-        },
-        "production_readiness_score": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 100
-        }
-      }
-    }
-  },
-  "additionalProperties": false
+  }
 }

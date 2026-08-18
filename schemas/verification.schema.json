@@ -1,7 +1,30 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spearchucker667.github.io/RUP/schemas/verification.schema.json",
-  "title": "Verification Output",
+  "title": "Verification Output Schema",
+  "type": "object",
+  "properties": {
+    "verification_results": {
+      "$ref": "#/$defs/VerificationResults"
+    },
+    "metrics": {
+      "$ref": "#/$defs/VerificationMetrics"
+    },
+    "audit_trail": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AuditEntry"
+      }
+    },
+    "recommendations": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "verification_results",
+    "metrics",
+    "audit_trail"
+  ],
   "$defs": {
     "Metadata": {
       "type": "object",
@@ -2456,64 +2479,5 @@
       },
       "additionalProperties": false
     }
-  },
-  "description": "Schema for verification_agent output",
-  "type": "object",
-  "required": [
-    "verification_results",
-    "metrics",
-    "recommendations"
-  ],
-  "properties": {
-    "meta": {
-      "$ref": "#/$defs/AgentMeta"
-    },
-    "verification_results": {
-      "type": "object",
-      "required": [
-        "overall_status"
-      ],
-      "properties": {
-        "overall_status": {
-          "type": "string",
-          "enum": [
-            "passed",
-            "passed_with_warnings",
-            "failed"
-          ]
-        },
-        "tests": {
-          "$ref": "#/$defs/TestResults"
-        },
-        "lint": {
-          "$ref": "#/$defs/LintResults"
-        },
-        "security": {
-          "$ref": "#/$defs/SecurityResults"
-        },
-        "build": {
-          "$ref": "#/$defs/BuildResults"
-        },
-        "type_check": {
-          "$ref": "#/$defs/TypeCheckResults"
-        }
-      }
-    },
-    "metrics": {
-      "$ref": "#/$defs/MetricsOutput"
-    },
-    "audit_trail": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/AuditEntry"
-      }
-    },
-    "recommendations": {
-      "$ref": "#/$defs/Recommendations"
-    },
-    "final_report": {
-      "type": "string"
-    }
-  },
-  "additionalProperties": false
+  }
 }

@@ -1,7 +1,36 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spearchucker667.github.io/RUP/schemas/execution.schema.json",
-  "title": "Execution Output",
+  "title": "Execution Output Schema",
+  "type": "object",
+  "properties": {
+    "changes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ExecutionChange"
+      }
+    },
+    "commits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ExecutionCommit"
+      }
+    },
+    "local_verification": {
+      "type": "object"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "changes",
+    "commits",
+    "local_verification"
+  ],
   "$defs": {
     "Metadata": {
       "type": "object",
@@ -2456,39 +2485,5 @@
       },
       "additionalProperties": false
     }
-  },
-  "description": "Schema for execution_agent output",
-  "type": "object",
-  "required": [
-    "changes",
-    "commits",
-    "local_verification"
-  ],
-  "properties": {
-    "meta": {
-      "$ref": "#/$defs/AgentMeta"
-    },
-    "changes": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/FileChange"
-      }
-    },
-    "commits": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/Commit"
-      }
-    },
-    "local_verification": {
-      "$ref": "#/$defs/LocalVerification"
-    },
-    "artifacts": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/Artifact"
-      }
-    }
-  },
-  "additionalProperties": false
+  }
 }

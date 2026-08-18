@@ -19,9 +19,12 @@ env/
 # Distributions
 build/
 
-# Mocks and outputs
+# RUP State & Outputs
+.rup/
+RUP_*.json
+RUP_*.md
 *_output.json
 mock_scenario_summary.json
 rup_mock_walkthrough.md
-RUP_FINAL_REPORT.md
 SKILL_RUP_GITHUB_DOCS_PUBLIC_RELEASE_HANDOFF.md
+

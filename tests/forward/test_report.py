@@ -16,8 +16,8 @@ def test_report_execution(tmp_path):
     run_verify(repo_dir)
     run_report(repo_dir)
     
-    assert (repo_dir / "RUP_FINAL_REPORT.json").exists()
-    assert (repo_dir / "RUP_FINAL_REPORT.md").exists()
+    assert (repo_dir / ".rup" / "RUP_FINAL_REPORT.json").exists()
+    assert (repo_dir / ".rup" / "RUP_FINAL_REPORT.md").exists()
     
     paths = RupPaths(repo_dir)
     state = StateManager(paths)
