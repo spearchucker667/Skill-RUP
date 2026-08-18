@@ -4,11 +4,11 @@ This repository is the implementation of `Skill-RUP`, a portable, agent-native s
 
 ## Mandatory Session Handoff
 
-Before concluding your session, you **MUST** update `docs/summary_of_work.md`.
+Before concluding your session, you **MUST** update `docs/development/summary_of_work.md`.
 Log your exact accomplishments, open blockers, validation results, and next actions. Do not end a session without updating the ledger.
 
 ## Project Context
-- **Target Repository**: `/Users/super_user/Projects/Skill-RUP/`
+- **Target Repository**: `<resolve from current checkout>`
 - **Canonical Source**: `https://github.com/spearchucker667/RUP-Protocol` (Use commit `c3d6f70375db15d53db2fba76d70b5b7c9cf98bb` for protocol version 3.0.0)
 - **Reference Material**: `.reference/` contains mixed canonical RUP, HQE Workbench, and other files. *Never* copy blindly from `.reference/` without classifying via source audit.
 

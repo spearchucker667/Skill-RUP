@@ -1,15 +1,34 @@
-# Installing Skill-RUP
+# Installation
 
-1. Clone this repository into your local agent tools directory or workspace:
-   ```bash
-   git clone https://github.com/your-org/Skill-RUP.git
-   ```
+Skill-RUP requires Python 3.11+ and is designed to run locally alongside your codebase.
 
-2. Ensure you have Python 3.11+ installed.
+## Prerequisites
+- **Python:** 3.11 or higher
+- **Git:** Version 2.0+
 
-3. Install requirements (optional, but recommended for advanced validation):
-   ```bash
-   pip install pyyaml jsonschema
-   ```
+## Local Installation
+Clone the repository:
+```bash
+git clone https://github.com/spearchucker667/Skill-RUP.git
+cd Skill-RUP
+```
 
-4. Map the `SKILL.md` entry point to your agent context.
+Install the dependencies:
+```bash
+pip install pyyaml jsonschema pytest
+```
+
+## Agent Integration
+To integrate Skill-RUP into an autonomous agent platform:
+1. Mount or provide read/write access to the target repository workspace.
+2. Instruct the agent to read `SKILL.md` as part of its primary directive.
+3. Ensure the agent has the ability to execute terminal commands (specifically `python3`).
+
+## Verification
+To verify the installation, run the self-test:
+```bash
+python scripts/forward_test.py --fixtures .
+```
+
+## Uninstalling
+Simply delete the `Skill-RUP` directory. There are no global system modifications.

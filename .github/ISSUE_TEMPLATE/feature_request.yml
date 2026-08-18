@@ -1,0 +1,46 @@
+name: Feature Request
+description: Propose a new capability or enhancement for the Skill-RUP runtime
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: checkboxes
+    id: security_check
+    attributes:
+      label: Security Check
+      options:
+        - label: I confirm this is NOT a vulnerability disclosure. (If it is, please read SECURITY.md and report privately).
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: The Problem
+      description: Is your feature request related to a problem? Please describe.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Capability
+      description: Describe the feature or enhancement you'd like to see.
+    validations:
+      required: true
+  - type: input
+    id: workflow
+    attributes:
+      label: Affected RUP Workflow / Phase
+      description: Which part of the RUP lifecycle does this affect?
+  - type: textarea
+    id: canonical
+    attributes:
+      label: Canonical-Semantics Relationship
+      description: Does this align with the upstream RUP Protocol? If this changes methodology, it must go upstream first.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What other solutions have you thought about?
+  - type: textarea
+    id: impact
+    attributes:
+      label: Compatibility Impact
+      description: Will this break existing agent compatibility or artifact schemas?

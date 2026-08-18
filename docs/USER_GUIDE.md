@@ -1,20 +1,42 @@
-# Skill-RUP User Guide
+# User Guide
 
-## Activating the Skill
-When an agent connects to this directory, it should parse `SKILL.md` to understand the workflow rules.
+This guide covers how to utilize Skill-RUP manually or via an autonomous agent.
 
-## Using the CLI
-
-The deterministic runtime is accessed via `runtime/cli.py`. You can run the lifecycle phases locally on any repository:
+## Core Commands
+The primary interface is `runtime/cli.py`.
 
 ```bash
-cd /path/to/Skill-RUP
-python3 -m runtime.cli discovery --target /path/to/my-repo
-python3 -m runtime.cli plan --target /path/to/my-repo
-python3 -m runtime.cli execute --target /path/to/my-repo
-python3 -m runtime.cli verify --target /path/to/my-repo
-python3 -m runtime.cli report --target /path/to/my-repo
+# Discovery Phase (analyzes codebase)
+python3 -m runtime.cli discovery /path/to/target-repo
+
+# Planning Phase (generates execution plan)
+python3 -m runtime.cli plan /path/to/target-repo
+
+# Execution Phase (applies changes)
+python3 -m runtime.cli execute /path/to/target-repo
+
+# Verification Phase (tests changes)
+python3 -m runtime.cli verify /path/to/target-repo
+
+# Reporting Phase (summarizes outcomes)
+python3 -m runtime.cli report /path/to/target-repo
 ```
 
-## Workflows
-The `workflows/` directory contains standard operating procedures (SOPs). Use them when you need rules for specific domains such as `ci-cd`, `bug-fixes`, etc.
+## Agent Directives
+Agents should be prompted to read `SKILL.md`, which defines the following workflow triggers:
+- `/RUP`: Complete lifecycle execution.
+- `/RUP discovery`: Triggers discovery phase.
+- `/RUP plan`: Triggers planning.
+- `/RUP execute`: Triggers execution.
+- `/RUP verify`: Triggers verification.
+- `/RUP report`: Triggers reporting.
+- `/RUP rollback`: Reverts changes.
+- `/RUP handoff`: Ends the session cleanly.
+
+## Common Workstreams
+The protocol supports specific focus modes:
+- **Hotfix:** For rapid bug fixing.
+- **Security:** Focused on vulnerability patching.
+- **Documentation:** For pure documentation updates.
+
+If verification fails, the agent is expected to catch the non-zero exit code, diagnose the issue via the generated `RUP_VERIFICATION.json`, and re-attempt execution.

@@ -1,0 +1,61 @@
+name: Bug Report
+description: File a bug report for Skill-RUP runtime or artifacts
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction Steps
+      description: Provide steps to reproduce the issue.
+    validations:
+      required: true
+  - type: input
+    id: skill_version
+    attributes:
+      label: Skill-RUP Version / Commit
+    validations:
+      required: true
+  - type: input
+    id: rup_version
+    attributes:
+      label: RUP Version
+  - type: input
+    id: os_env
+    attributes:
+      label: OS / Python Version / Agent Platform
+    validations:
+      required: true
+  - type: textarea
+    id: target_repo
+    attributes:
+      label: Target Repo Characteristics
+      description: Description of the repository where the agent was running (e.g., Node.js project, large monorepo).
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Artifacts
+      description: |
+        Please provide relevant logs or JSON artifact files.
+        **WARNING: Please redact any secrets, internal credentials, or proprietary source code before pasting!**

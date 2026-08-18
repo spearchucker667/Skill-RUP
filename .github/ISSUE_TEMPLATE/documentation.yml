@@ -1,0 +1,29 @@
+name: Documentation Issue
+description: Report missing, unclear, or incorrect documentation
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: input
+    id: document
+    attributes:
+      label: Affected Document
+      description: Which markdown file or section needs fixing?
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: Incorrect or Missing Content
+      description: What is wrong or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Clarification
+      description: How should we fix it?
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Links to RUP Protocol schemas or code lines supporting the change.

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a Security Vulnerability
+    url: https://github.com/spearchucker667/Skill-RUP/security/policy
+    about: Please report security vulnerabilities privately. Do not open a public issue.
+  - name: Upstream RUP Protocol Issues
+    url: https://github.com/spearchucker667/RUP-Protocol/issues
+    about: For methodology or schema changes, please file an issue upstream.
