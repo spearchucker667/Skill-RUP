@@ -142,6 +142,11 @@ def main():
 
     args = parser.parse_args()
 
+    # Ensure the target directory is absolute before passing it to phase runners.
+    # Phase modules invoke subprocesses with cwd=self.target_dir, which must be
+    # an absolute path to satisfy the secure command runner.
+    args.target = args.target.resolve()
+
     try:
         if args.phase in ("run", "all"):
             return run_full_lifecycle(

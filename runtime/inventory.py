@@ -147,12 +147,16 @@ class InventoryManager:
         """
         meta = {"contributors": 1, "last_commit": "N/A"}
 
-        try:
-            # Only treat this as a repo if .git exists and the cwd is usable.
-            git_dir = self.target_dir / ".git"
-            if not git_dir.exists():
-                return meta
+        # Verify the target directory exists and is accessible.
+        if not self.target_dir.exists() or not self.target_dir.is_dir():
+            return meta
 
+        # Only treat this as a repo if .git exists.
+        git_dir = self.target_dir / ".git"
+        if not git_dir.exists():
+            return meta
+
+        try:
             rc, stdout, _ = run_command(
                 ["git", "rev-parse", "--is-inside-work-tree"],
                 cwd=self.target_dir,
