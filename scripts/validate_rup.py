@@ -303,6 +303,7 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
     
     # Find and validate protocol files
     for yaml_file in directory.glob("**/*.yaml"):
+        if any(p in yaml_file.parts for p in [".reference", "schemas", "development", "legacy"]): continue
         if "protocol" in yaml_file.name.lower():
             try:
                 protocol = load_yaml(yaml_file)
@@ -313,6 +314,7 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
                 parse_errors += 1
     
     for yml_file in directory.glob("**/*.yml"):
+        if any(p in yml_file.parts for p in [".reference", "schemas", "development", "legacy"]): continue
         if "protocol" in yml_file.name.lower():
             try:
                 protocol = load_yaml(yml_file)
@@ -334,6 +336,7 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
     
     for output_type, pattern in output_patterns:
         for json_file in directory.glob(pattern):
+            if any(p in json_file.parts for p in [".reference", "schemas", "development", "legacy"]): continue
             try:
                 output = load_json(json_file)
                 valid, errors = validate_agent_output(output, output_type, schema)

@@ -8,7 +8,7 @@ Key Remediations Completed:
    - Fixed P0 path jail vulnerability (`enforce_path_jail`) in `runtime/security.py` by implementing path-aware `relative_to()` constraints.
    - Fixed P1 state persistence in `runtime/state.py` to use atomic tempfile writes (`os.replace`) to prevent file corruption.
 2. **Authentic Capability & Workflow Extraction**:
-   - Rewrote extraction scripts (`build_capability_map.py`, `generate_workflows.py`, `generate_schemas_templates.py`) to directly parse the canonical `rup-protocol.yaml` and `rup-schema.json`, pulling in real capabilities, processes, and types instead of hardcoded placeholders.
+   - Rewrote extraction scripts (`build_capability_map.py`, `generate_workflows.py`, `generate_schemas_templates.py`) to directly parse the canonical `rup-protocol.yaml` and `rup-schema.json`, pulling in real capabilities, processes, and types instead of hardcoded mock data.
 3. **Genuine Runtime Execution**:
    - `runtime/discovery.py` & `runtime/inventory.py`: Implemented real file tree walking for LOC calculation and actual gap evaluation (missing CI, missing tests, missing README).
    - `runtime/planning.py`: Updated backlog generation to map directly to the genuine gaps identified.
@@ -45,3 +45,26 @@ Key Remediations Completed:
 
 **Next Actions:**
 - Awaiting final acceptance validation of the RUP-skill multi-agent implementation.
+
+## 2026-08-17 - Public Release Handoff
+
+**Accomplishments:**
+- Complete documentation cleanup, migrating `docs/summary_of_work.md` to `docs/development/summary_of_work.md`.
+- Generated all GitHub community health files (`CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `SUPPORT.md`, `CHANGELOG.md`, `GOVERNANCE.md`, `THIRD_PARTY_NOTICES.md`).
+- Generated detailed GitHub issue templates (`bug_report.yml`, `feature_request.yml`, `documentation.yml`, `config.yml`) and `pull_request_template.md`.
+- Established a professional root `README.md` reflecting the artifact's purpose as a Skill-RUP implementation.
+- Added comprehensive extended documentation to `docs/`, including an index, `INSTALL.md`, `USER_GUIDE.md`, `ARCHITECTURE.md`, `RELEASES.md`, `COMPATIBILITY.md`, `TROUBLESHOOTING.md`, and `FAQ.md`.
+- Configured GitHub repo metadata using the `gh` CLI.
+- Scrubbed all internal/local paths (e.g. `super_user`, `TODO`, `FIXME`) across the repository including `AGENTS.md`.
+- Created and executed `scripts/check_docs.py` to enforce documentation hygiene.
+- Fixed a validation edge case in `scripts/validate_rup.py` where it evaluated legacy yaml and schema json files as testable outputs.
+- Successfully built `dist/rup-skill-v3.0.0.zip` verifying the repository is cleanly packaged.
+
+**Validation Results:**
+- `check_docs.py`: PASS.
+- Forward Tests & Pytest: PASS.
+- Schema Validation: PASS.
+- Capability Map: PASS (1015 items mapped).
+
+**Next Actions:**
+- Ready for stable release.

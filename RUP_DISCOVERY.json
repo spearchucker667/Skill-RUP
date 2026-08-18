@@ -3,23 +3,23 @@
     "name": "Skill-RUP",
     "primary_language": "typescript",
     "repo_type": "application",
-    "loc": 377998,
-    "file_count": 1130
+    "loc": 379692,
+    "file_count": 1155
   },
   "languages": [
     {
       "name": "typescript",
-      "percentage": 78.75,
+      "percentage": 78.7,
       "lockfile_present": false
     },
     {
       "name": "rust",
-      "percentage": 12.31,
+      "percentage": 12.3,
       "lockfile_present": false
     },
     {
       "name": "python",
-      "percentage": 5.15,
+      "percentage": 5.21,
       "lockfile_present": false
     },
     {

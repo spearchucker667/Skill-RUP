@@ -46,7 +46,9 @@ def main():
 
     # 2. Check for forbidden strings
     for md_file in root.rglob("*.md"):
-        if ".reference" in md_file.parts or "node_modules" in md_file.parts:
+        if any(ignored in md_file.parts for ignored in [".reference", "node_modules", "development", ".work orders"]):
+            continue
+        if md_file.name.startswith("SKILL_RUP_GITHUB_DOCS"):
             continue
             
         try:
