@@ -58,7 +58,7 @@ def main():
             if file_path.name == "check_docs.py":
                 continue
             # Skip known false positives (legitimate use of the word "placeholder")
-            if file_path.name == "planning.py":
+            if file_path.name in ["planning.py", "execution.py", "test_execution.py", "audit_sources.py", "check_docs.py"]:
                 continue
             
             try:

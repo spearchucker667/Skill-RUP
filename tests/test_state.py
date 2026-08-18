@@ -144,6 +144,27 @@ def test_state_trust_boundary(tmp_path):
     assert state.load_json("RUP_DISCOVERY.json") == {"phase": "discovery"}
 
 
+def test_run_id_is_deterministic_for_same_target(tmp_path):
+    """RUP-STATE-001: run IDs for the same target must be deterministic."""
+    paths = RupPaths(tmp_path)
+    state_a = StateManager(paths)
+    state_b = StateManager(paths)
+    assert state_a.run_id == state_b.run_id
+    assert state_a.run_id.startswith("rup-")
+
+
+def test_run_id_differs_for_different_targets(tmp_path):
+    """RUP-STATE-002: run IDs must differ for different target paths."""
+    target_a = tmp_path / "repo_a"
+    target_b = tmp_path / "repo_b"
+    target_a.mkdir()
+    target_b.mkdir()
+
+    state_a = StateManager(RupPaths(target_a))
+    state_b = StateManager(RupPaths(target_b))
+    assert state_a.run_id != state_b.run_id
+
+
 def test_artifact_builder_records_markdown_in_ledger(tmp_path):
     """ArtifactBuilder must record Markdown artifacts in the state ledger."""
     paths = RupPaths(tmp_path)

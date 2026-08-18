@@ -39,10 +39,11 @@ SCHEMA_DEFINITIONS = {
         "title": "Execution Output Schema",
         "type": "object",
         "properties": {
-            "changes": {"type": "array", "items": {"$ref": "#/$defs/ExecutionChange"}},
-            "commits": {"type": "array", "items": {"$ref": "#/$defs/ExecutionCommit"}},
-            "local_verification": {"type": "object"},
-            "artifacts": {"type": "array", "items": {"type": "string"}}
+            "changes": {"type": "array", "items": {"$ref": "#/$defs/FileChange"}},
+            "recommendations": {"type": "array", "items": {"$ref": "#/$defs/WorkstreamRecommendation"}},
+            "commits": {"type": "array", "items": {"$ref": "#/$defs/Commit"}},
+            "local_verification": {"$ref": "#/$defs/LocalVerification"},
+            "artifacts": {"type": "array", "items": {"$ref": "#/$defs/Artifact"}}
         },
         "required": ["changes", "commits", "local_verification"]
     },

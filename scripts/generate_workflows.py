@@ -210,6 +210,9 @@ def load_canonical_workflows(proto_path: Path) -> dict:
                 filename = WORKSTREAM_FILENAME_MAP[ws_key]
                 workflows[filename] = ("workstream", ws_key, workstream)
 
+    for wf_key, data in OPERATIONAL_WORKFLOWS.items():
+        workflows[wf_key] = ("operational", wf_key, data)
+
     return workflows
 
 
@@ -235,10 +238,16 @@ def main():
         action="store_true",
         help="Check that canonical workflows exist with deterministic content",
     )
+    parser.add_argument(
+        "--workflows-dir",
+        type=Path,
+        default=None,
+        help="Directory to read/write workflow files (default: <repo>/workflows)",
+    )
     args = parser.parse_args()
 
     root = Path(__file__).parent.parent.resolve()
-    wf_dir = root / "workflows"
+    wf_dir = args.workflows_dir if args.workflows_dir else root / "workflows"
     wf_dir.mkdir(exist_ok=True, parents=True)
 
     proto_file = root / "protocol" / "rup-protocol.yaml"

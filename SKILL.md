@@ -39,8 +39,9 @@ If `SKILL.md` conflicts with the canonical protocol/schema, the canonical protoc
 - `/RUP docs`
 - `/RUP tests`
 - `/RUP governance`
-- `/RUP container`
-- `/RUP advanced`
+- `/RUP containers`
+- `/RUP observability`
+- `/RUP bug-fixes`
 
 A plain `/RUP` must run the complete canonical sequence:
 `Discovery -> Planning -> Execution -> Verification -> Final Report/Handoff`
@@ -71,13 +72,10 @@ Refer to the documents under the `workflows/` and `references/` directories as n
 - [workflows/2-planning.md](workflows/2-planning.md)
 - [workflows/3-execution.md](workflows/3-execution.md)
 - [workflows/4-verification.md](workflows/4-verification.md)
-- [workflows/advanced-quality.md](workflows/advanced-quality.md)
 - [workflows/bug-fixes.md](workflows/bug-fixes.md)
 - [workflows/ci-cd.md](workflows/ci-cd.md)
-- [workflows/ci-cd-upgrade.md](workflows/ci-cd-upgrade.md)
 - [workflows/containers.md](workflows/containers.md)
 - [workflows/docs.md](workflows/docs.md)
-- [workflows/documentation.md](workflows/documentation.md)
 - [workflows/governance.md](workflows/governance.md)
 - [workflows/handoff.md](workflows/handoff.md)
 - [workflows/hotfix.md](workflows/hotfix.md)

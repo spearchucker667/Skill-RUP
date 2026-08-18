@@ -324,9 +324,10 @@ class VerificationPhase:
             for cov_file in self.target_dir.glob(".coverage*"):
                 if cov_file in coverage_files_before:
                     continue
+                # Best-effort cleanup of temporary coverage files.
                 try:
                     cov_file.unlink()
-                except Exception:
+                except Exception:  # nosec B110
                     pass
 
     def _run_tests_with_flakiness(self) -> Dict[str, Any]:
@@ -398,11 +399,12 @@ class VerificationPhase:
             # Prefer JSON output for an exact count; fall back to line counting.
             json_cmd = cmd + ["--output-format=json"]
             rc, stdout, _ = self._run_tool(json_cmd, timeout=120)
+            # Fallback to line counting if ruff JSON output is unavailable.
             try:
                 data = json.loads(stdout)
                 if isinstance(data, list):
                     return len(data), stdout
-            except Exception:
+            except Exception:  # nosec B110
                 pass
 
         rc, stdout, _ = self._run_tool(cmd, timeout=120)
@@ -990,7 +992,6 @@ class VerificationPhase:
                 "lint": schema_lint,
                 "security": {
                     "secret_scan": secret_result,
-                    "prompt_injection_scan": prompt_injection_result,
                     "dependency_scan": dep_result,
                     "sast_scan": sast_result,
                 },

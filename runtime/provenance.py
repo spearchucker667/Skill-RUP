@@ -17,6 +17,7 @@ originate from the pinned upstream RUP-Protocol commit.  It can:
 """
 import hashlib
 import json
+import re
 import tempfile
 import warnings
 from datetime import datetime, timezone
@@ -53,18 +54,18 @@ UPSTREAM_TO_LOCAL_MAP: Dict[str, str] = {
 # applied, a human-readable rationale, and the tests that demonstrate parity
 # with the canonical source intent.
 _TRANSFER_OVERRIDES: Dict[str, Dict[str, Any]] = {
-    "examples/verification_output.json": {
+    "rup-schema.json": {
         "transfer_type": "derived",
         "transformation_tool": "manual/schema alignment",
         "rationale": (
-            "Extended locally to include the prompt_injection_scan security gate "
-            "and additional audit-trail metadata required by Skill-RUP's "
-            "verification output schema while preserving the canonical example "
-            "shape."
+            "Extended locally to add execution output rollback fields, "
+            "prompt_injection_scan security results, and additional tool/reason "
+            "metadata required by Skill-RUP while preserving the canonical "
+            "RUP-Protocol validation contract."
         ),
         "parity_tests": [
+            "tests/test_validator_cli.py::test_canonical_invocation_all",
             "tests/test_verification.py::test_prompt_injection_scan_separate_from_sast",
-            "tests/forward/test_verify.py::test_verify_execution",
         ],
     },
 }
@@ -182,25 +183,33 @@ def enumerate_git_tree(repo_path: Path, ref: str = "HEAD") -> List[Dict[str, Any
     if not stdout:
         return entries
 
-    # git ls-tree -l -z emits records separated by NUL.  Each record is:
-    # "<mode> <type> <sha>\t<size>\t<path>"
+    # ``git ls-tree -r -l -z`` emits records separated by NUL.  The format is
+    # ``<mode> <type> <sha> [<size>]\t<path>``; ``size`` is present for blobs
+    # when ``-l`` is used and omitted for submodule/commit entries.
+    record_re = re.compile(
+        r"^(?P<mode>\d+) (?P<type>\w+) (?P<sha>[0-9a-f]{40})(?:\s+(?P<size>-|\d+))?\t(?P<path>.+)$"
+    )
     for record in stdout.split("\0"):
         if not record:
             continue
-        meta, size_path = record.split("\t", 1)
-        size_str, path = size_path.split("\t", 1)
-        mode, obj_type, sha = meta.split(" ", 2)
+        match = record_re.match(record)
+        if not match:
+            warnings.warn(
+                f"Could not parse git ls-tree record: {record!r}", RuntimeWarning
+            )
+            continue
+        size_str = match.group("size")
         try:
-            size = int(size_str)
+            size = int(size_str) if size_str is not None and size_str != "-" else -1
         except ValueError:
             size = -1
         entries.append(
             {
-                "mode": mode,
-                "type": obj_type,
-                "sha": sha,
+                "mode": match.group("mode"),
+                "type": match.group("type"),
+                "sha": match.group("sha"),
                 "size_bytes": size,
-                "path": path,
+                "path": match.group("path"),
             }
         )
 
@@ -262,7 +271,7 @@ def build_canonical_source_manifest(
         "canonical_repository": CANONICAL_RUP_REPO,
         "canonical_commit": canonical_commit,
         "canonical_protocol_version": CANONICAL_PROTOCOL_VERSION,
-        "source_root": str(upstream_dir),
+        "source_root": CANONICAL_RUP_REPO,
         "total_files": len(files),
         "files": files,
     }

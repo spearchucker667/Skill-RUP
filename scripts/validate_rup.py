@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import yaml
-    from jsonschema import Draft202012Validator, ValidationError
+    from jsonschema import Draft202012Validator, ValidationError, SchemaError
 except ImportError as e:
     print(f"Error: Missing required module: {e.name}")
     print("Install with: pip install jsonschema pyyaml")
@@ -106,13 +106,12 @@ CROSS = "✗" if _supports_unicode() else "FAIL"
 WARN = "⚠" if _supports_unicode() else "WARN"
 
 
-def load_schema(schema_path: Optional[Path] = None) -> Dict[str, Any]:
-    """Load the RUP JSON Schema."""
+def _find_schema_path(schema_path: Optional[Path] = None) -> Path:
+    """Resolve the RUP JSON Schema path on disk."""
     if schema_path is not None:
         p = Path(schema_path)
         if p.exists():
-            with open(p, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            return p.resolve()
         raise FileNotFoundError(f"Schema not found: {p}")
 
     # Check candidate paths in order of preference
@@ -125,10 +124,16 @@ def load_schema(schema_path: Optional[Path] = None) -> Dict[str, Any]:
     ]
     for candidate in candidates:
         if candidate.exists():
-            with open(candidate, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            return candidate.resolve()
 
     raise FileNotFoundError(f"Schema not found. Searched: {[str(c) for c in candidates]}")
+
+
+def load_schema(schema_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Load the RUP JSON Schema."""
+    p = _find_schema_path(schema_path)
+    with open(p, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 
 def _resolve_schemas_dir(schema_path: Optional[Path] = None) -> Optional[Path]:
@@ -172,7 +177,7 @@ def _validate_json_schema(schema_data: Dict[str, Any]) -> Tuple[bool, List[Valid
     try:
         Draft202012Validator.check_schema(schema_data)
         return True, []
-    except ValidationError as e:
+    except (ValidationError, SchemaError) as e:
         return False, [e]
 
 
@@ -403,11 +408,12 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
 
     try:
         schema = load_schema(args.schema)
+        schema_path = _find_schema_path(args.schema)
     except FileNotFoundError as e:
         print(f"{colorize('Error:', Colors.RED)} {e}")
         return 1
 
-    schemas_dir = _resolve_schemas_dir(args.schema)
+    schemas_dir = _resolve_schemas_dir(schema_path)
     derived_schemas: Dict[str, Dict[str, Any]] = {}
     if schemas_dir is not None:
         derived_schemas = _load_derived_schemas(schemas_dir)

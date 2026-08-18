@@ -1,15 +1,21 @@
-# Reporting Workflow
+# Operational Workflow: Reporting
 
 ## Purpose
-Standard reporting process mapped from RUP Protocol.
+Evidence-backed final report generation, run manifest creation, follow-up tracking, and truthful publication instructions.
+
+## Operational Command
+```bash
+python3 -m runtime.cli report --target <dir>
+```
 
 ## Canonical Rules & Process
 Follow canonical RUP directives for this workflow.
 
 ## Raw Protocol Data
 ```yaml
-description: Standard reporting process mapped from RUP Protocol.
-
+description: Evidence-backed final report generation, run manifest creation, follow-up tracking, and truthful publication
+  instructions.
+cli_command: python3 -m runtime.cli report --target <dir>
 ```
 
 ## Validation

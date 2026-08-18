@@ -1033,11 +1033,11 @@ public issue for security-sensitive findings.
                 if file_path:
                     changed_files.add(file_path)
 
-        # RUP-EXEC-003: per-item local verification after changes are applied.
+        # RUP-EXEC-003: run a single local verification pass after changes are applied.
+        # The canonical protocol schema expects a single {tests, lint, build, type_check}
+        # object, not a per-item map.
         tools = self.tool_detector.detect_all()
-        local_verification: Dict[str, Any] = {}
-        for item in ordered_items:
-            local_verification[item.get("id", "")] = self._verify_item(item, tools)
+        local_verification = self._verify_item({}, tools)
 
         # RUP-EXEC-001/005/006: attribute only net-new changes to backlog items.
         existing_paths = {c.get("file_path") for c in changes if c.get("file_path")}
@@ -1091,6 +1091,9 @@ public issue for security-sensitive findings.
         # RUP-EXEC-004: build rollback procedure.
         rollback_procedure = self._build_rollback(changes, baseline_paths)
 
+        # The full execution record is used for the human-readable report and may
+        # contain downstream extensions (recommendations, rollback details). The
+        # machine-readable JSON artifact must conform to the canonical protocol schema.
         execution_data: Dict[str, Any] = {
             "changes": changes,
             "recommendations": recommendations,
@@ -1099,9 +1102,15 @@ public issue for security-sensitive findings.
             "rollback_procedure": rollback_procedure,
             "artifacts": [],
         }
+        schema_execution_data: Dict[str, Any] = {
+            "changes": changes,
+            "commits": commits,
+            "local_verification": local_verification,
+            "artifacts": [],
+        }
 
         # Save machine-readable state atomically.
-        self.state_manager.save_json(execution_data, "RUP_EXECUTION.json")
+        self.state_manager.save_json(schema_execution_data, "RUP_EXECUTION.json")
 
         # Build human-readable markdown matching canonical template.
         self.artifact_builder.build_markdown(

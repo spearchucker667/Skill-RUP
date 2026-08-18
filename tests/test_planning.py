@@ -85,7 +85,7 @@ def test_constraints_persisted_and_rendered(tmp_path):
         "risk_tolerance": "low",
     }
 
-    md_path = phase.paths.get_state_path("RUP_PLAN.md")
+    md_path = phase.state_manager.paths.get_state_path("RUP_PLAN.md")
     assert md_path.exists()
     md_text = md_path.read_text(encoding="utf-8")
     assert "30 minutes" in md_text
@@ -155,7 +155,7 @@ def test_plan_output_validates_against_schema(tmp_path):
             "--schema",
             str(schema_path),
             "output",
-            str(phase.paths.get_state_path("RUP_PLAN.json")),
+            str(phase.state_manager.paths.get_state_path("RUP_PLAN.json")),
             "plan",
         ],
         capture_output=True,

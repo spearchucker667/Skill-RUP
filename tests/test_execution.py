@@ -321,13 +321,11 @@ def test_max_files_limits_mutation(tmp_path):
     )
     data = phase.execute()
 
-    concrete = [c for c in data["changes"] if c.get("change_type") != "recommendation"]
-    file_paths = {c["file_path"] for c in concrete}
+    file_paths = {c["file_path"] for c in data["changes"]}
     assert len(file_paths) <= 2
     assert any(
         "max-files limit" in c.get("rationale", "")
-        for c in data["changes"]
-        if c.get("change_type") == "recommendation"
+        for c in data["recommendations"]
     )
 
 
@@ -360,7 +358,249 @@ def test_risk_tolerance_skips_high_risk_dispatch(tmp_path):
 
     assert not any(c.get("file_path") == "SECURITY.md" for c in data["changes"])
     assert any(
-        c.get("change_type") == "recommendation"
-        and "risk" in c.get("rationale", "").lower()
+        "risk" in c.get("rationale", "").lower()
+        for c in data["recommendations"]
+    )
+
+
+def test_bug_workstream_emits_agent_only_recommendation(tmp_path):
+    """H-04: bug workstream must not pretend to remediate; emit AGENT_ONLY."""
+    repo = tmp_path / "bug_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "BUG-001",
+                "category": "bugs",
+                "title": "Fix critical bug",
+                "acceptance_criteria": [],
+                "risk": "high",
+            }
+        ],
+        selected_items=["BUG-001"],
+    )
+    data = phase.execute()
+
+    assert data["changes"] == []
+    assert len(data["recommendations"]) == 1
+    rec = data["recommendations"][0]
+    assert rec["backlog_item_id"] == "BUG-001"
+    assert rec["subtype"] == "bug"
+    assert rec["disposition"] == "AGENT_ONLY"
+
+
+def test_test_workstream_creates_pytest_ini_and_recommends_tests(tmp_path):
+    """H-05: test workstream scaffolds config but refuses to generate tautologies."""
+    repo = tmp_path / "test_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "TEST-001",
+                "category": "tests",
+                "title": "Missing Test Framework",
+                "acceptance_criteria": [
+                    "test_sanity.py asserts the module loads without error"
+                ],
+                "risk": "low",
+            }
+        ],
+        selected_items=["TEST-001"],
+    )
+    data = phase.execute()
+
+    assert any(c["file_path"] == "pytest.ini" for c in data["changes"])
+    assert (repo / "pytest.ini").exists()
+    rec = [r for r in data["recommendations"] if r["backlog_item_id"] == "TEST-001"]
+    assert rec and rec[0]["disposition"] == "AGENT_ONLY"
+    assert not any(
+        c.get("file_path", "").endswith(".py") and "test" in c.get("file_path", "")
         for c in data["changes"]
     )
+
+
+def test_security_subtypes_dispatch_correctly(tmp_path):
+    """H-06: security items dispatch by subtype, not all to SECURITY.md."""
+    repo = tmp_path / "security_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "SEC-001",
+                "category": "security",
+                "title": "Exposed Secrets Detected",
+                "acceptance_criteria": [],
+                "risk": "high",
+            },
+            {
+                "id": "SEC-003",
+                "category": "security",
+                "title": "Missing SECURITY.md Policy",
+                "acceptance_criteria": [],
+                "risk": "low",
+            },
+            {
+                "id": "SEC-100",
+                "category": "security",
+                "title": "Missing Dependency Lockfile for Python",
+                "acceptance_criteria": [],
+                "risk": "medium",
+            },
+        ],
+        selected_items=["SEC-001", "SEC-003", "SEC-100"],
+    )
+    data = phase.execute()
+
+    # SEC-001 (secret exposure) must not create SECURITY.md.
+    sec001_recs = [r for r in data["recommendations"] if r["backlog_item_id"] == "SEC-001"]
+    assert sec001_recs and sec001_recs[0]["subtype"] == "secret_exposure"
+    assert sec001_recs[0]["disposition"] == "AGENT_ONLY"
+
+    # SEC-003 (security policy) creates SECURITY.md.
+    assert any(c["file_path"] == "SECURITY.md" for c in data["changes"])
+
+    # SEC-100 (lockfile) emits a PARTIAL recommendation.
+    sec100_recs = [r for r in data["recommendations"] if r["backlog_item_id"] == "SEC-100"]
+    assert sec100_recs and sec100_recs[0]["subtype"] == "lockfile"
+    assert sec100_recs[0]["disposition"] == "PARTIAL"
+
+
+def test_dx_workstream_handlers_create_config(tmp_path):
+    """H-07: LINT-001 and TYPE-001 create linter/type-checker configs."""
+    repo = tmp_path / "dx_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "LINT-001",
+                "category": "dx",
+                "title": "Missing Linter Configuration",
+                "acceptance_criteria": [],
+                "risk": "low",
+            },
+            {
+                "id": "TYPE-001",
+                "category": "dx",
+                "title": "Missing Static Type Checking",
+                "acceptance_criteria": [],
+                "risk": "low",
+            },
+        ],
+        selected_items=["LINT-001", "TYPE-001"],
+    )
+    data = phase.execute()
+
+    assert any(c["file_path"] == "ruff.toml" for c in data["changes"])
+    assert (repo / "ruff.toml").exists()
+    assert any(c["file_path"] == "mypy.ini" for c in data["changes"])
+    assert (repo / "mypy.ini").exists()
+
+
+def test_container_iac_observability_are_not_ported(tmp_path):
+    """H-08: container, IaC, and observability handlers are explicit NOT_PORTED."""
+    repo = tmp_path / "future_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "CONT-001",
+                "category": "containerization",
+                "title": "Missing Container Configuration",
+                "acceptance_criteria": [],
+                "risk": "low",
+            },
+            {
+                "id": "IAC-001",
+                "category": "iac",
+                "title": "Missing Infrastructure as Code",
+                "acceptance_criteria": [],
+                "risk": "low",
+            },
+            {
+                "id": "OBS-001",
+                "category": "observability",
+                "title": "Missing Observability Configuration",
+                "acceptance_criteria": [],
+                "risk": "low",
+            },
+        ],
+        selected_items=["CONT-001", "IAC-001", "OBS-001"],
+    )
+    data = phase.execute()
+
+    assert data["changes"] == []
+    dispositions = {r["backlog_item_id"]: r["disposition"] for r in data["recommendations"]}
+    assert dispositions.get("CONT-001") == "NOT_PORTED"
+    assert dispositions.get("IAC-001") == "NOT_PORTED"
+    assert dispositions.get("OBS-001") == "NOT_PORTED"
+
+
+def test_recommendations_are_not_file_changes(tmp_path):
+    """Recommendations must never appear in the changes list."""
+    repo = tmp_path / "rec_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "BUG-001",
+                "category": "bugs",
+                "title": "Bug fix",
+                "acceptance_criteria": [],
+                "risk": "low",
+            }
+        ],
+        selected_items=["BUG-001"],
+    )
+    data = phase.execute()
+
+    for change in data["changes"]:
+        assert change.get("change_type") != "recommendation"
+    assert data["recommendations"]

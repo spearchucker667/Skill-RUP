@@ -1,15 +1,20 @@
-# Handoff Workflow
+# Operational Workflow: Session Handoff
 
 ## Purpose
-Standard handoff process mapped from RUP Protocol.
+Standard session ledger recording in docs/development/summary_of_work.md before concluding.
+
+## Operational Command
+```bash
+Update docs/development/summary_of_work.md
+```
 
 ## Canonical Rules & Process
 Follow canonical RUP directives for this workflow.
 
 ## Raw Protocol Data
 ```yaml
-description: Standard handoff process mapped from RUP Protocol.
-
+description: Standard session ledger recording in docs/development/summary_of_work.md before concluding.
+cli_command: Update docs/development/summary_of_work.md
 ```
 
 ## Validation

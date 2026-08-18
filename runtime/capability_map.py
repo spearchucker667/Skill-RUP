@@ -218,7 +218,8 @@ def load_canonical_capabilities(skill_root: Path) -> List[Dict[str, Any]]:
     # Phase steps become capabilities.
     for phase in phases:
         phase_id = phase.get("id", "")
-        category = phase_id.replace("phase_", "") if phase_id.startswith("phase_") else phase_id
+        # Strip the "phase_N_" prefix so "phase_4_verification" becomes "verification".
+        category = phase_id.split("_", 2)[-1] if phase_id.startswith("phase_") else phase_id
         steps = phase.get("steps", [])
         for step in steps:
             step_id = step.get("id", "")
