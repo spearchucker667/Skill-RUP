@@ -445,3 +445,41 @@ Key Remediations Completed:
 
 ### Next Actions:
 - No further work required for this handoff.
+
+## 2026-08-18 - Session: Resolve Relative target_dir Causing Forward-Test Failures in CI
+
+**Agent**: Kimi Code CLI
+**Task**: Fix CI forward-test failures where `runtime/cli.py` passed a relative `target_dir` to phase runners, causing `run_command()` to raise `ValueError: Invalid cwd` on Ubuntu runners.
+
+### Accomplishments:
+- **Root cause identified**: `scripts/forward_test.py` constructs fixture directories under the relative `--fixtures tests/fixtures` path. When forwarded via `--target`, `argparse` preserved a relative `Path`. Phase runners passed this relative path to `run_command()`, whose secure wrapper requires an absolute `cwd`. On CI this aborted the lifecycle with `Invalid cwd: tests/fixtures/rup_fwd_...`.
+- **CLI fix**: `runtime/cli.py` now resolves `args.target = args.target.resolve()` immediately after parsing, so every phase runner receives an absolute path.
+- **Inventory hardening**: `runtime/inventory._get_git_metadata()` now:
+  - Returns defaults if `target_dir` does not exist or is not a directory.
+  - Checks `.git` existence before any git subprocess.
+  - Wraps all git queries in a broad `try/except` so fixture/non-repo targets cannot abort inventory generation.
+
+### Files Modified:
+1. `runtime/cli.py`
+2. `runtime/inventory.py`
+3. `docs/development/summary_of_work.md` (this entry)
+
+### Validation Results:
+- `python -m compileall runtime scripts` → **passed**
+- `python -m pytest tests/ -q` → **50 passed, 3 warnings**
+- `python scripts/forward_test.py --fixtures tests/fixtures` → **Passed: 10/10**
+- `bandit -r runtime scripts -c bandit.yaml` → **No issues identified**
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` → **5 files validated, all passed**
+- `python scripts/build_capability_map.py --check` → **PASS**
+- `git diff --check` → **OK**
+- `git ls-files -s | awk '$1 == "160000" {print}'` → **empty**
+
+### Push:
+- Committed as `11f8167 fix(runtime): resolve target_dir to absolute in CLI and harden inventory git metadata`
+- Pushed to `main`.
+
+### Open Blockers:
+- None.
+
+### Next Actions:
+- Monitor GitHub Actions for commit to confirm `Forward Tests` passes on Ubuntu and the full CI matrix completes.
