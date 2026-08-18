@@ -1,0 +1,9 @@
+name: Release Package
+on:
+  release:
+    types: [created]
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3

@@ -1,0 +1,26 @@
+.DS_Store
+/.reference
+/.work orders
+/.freebuff
+development/source-audit/reference-sha256.txt
+development/source-audit/canonical-hqe-commit.txt
+development/source-audit/canonical-rup-commit.txt
+provenance/source-manifest.sha256
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+.venv/
+env/
+
+# Distributions
+build/
+
+# Mocks and outputs
+*_output.json
+mock_scenario_summary.json
+rup_mock_walkthrough.md
+RUP_FINAL_REPORT.md

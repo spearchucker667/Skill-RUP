@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spearchucker667.github.io/RUP/schemas/rollback.schema.json",
+  "title": "Rollback Schema",
+  "type": "object"
+}
