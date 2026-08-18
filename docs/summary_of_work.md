@@ -29,3 +29,19 @@ Key Remediations Completed:
 
 ## Next Actions
 - Ready for integration and distribution.
+
+## 2026-08-17 - Final Remediation Pass
+
+**Accomplishments:**
+- Fixed `run_command` return tuple parsing across all modules (`runtime/execution.py`, `runtime/verification.py`).
+- Implemented robust testing metrics: Verification now strictly distinguishes between `passed`, `passed_with_warnings`, and `failed`, executing language-specific tools (`pytest`, `npm test`, linters) with 3-run flakiness detection and generating schema-compliant `VerificationOutput` JSON results.
+- Hardened CLI and CI execution: `runtime/cli.py` now exits with non-zero on verification failure, and `forward_test.py` strictly parses output JSON assertions, fixing the false-PASS harness issue.
+- CI pipeline repairs: Injected necessary Python dependencies (`PyYAML`, `jsonschema`), fixed the schema validation targets, implemented a functional `bandit` security CI, and completed `release-package.yml` to package and upload artifacts dynamically.
+- Perfected schema definitions: The schema generation logic (`generate_schemas_templates.py`) natively embeds `$defs` resolving local references, and generates durable state contracts for `handoff`, `rollback`, and `session-state`.
+- Completed capability mapping: Rewrote `build_capability_map.py` to deeply extract canonical sections, map actual existence, and guarantee implementation coverage, correctly resulting in 1015 mapped capabilities with strict file validation.
+- Restored missing security and framework documentation (`ARTIFACT_CONTRACTS.md`, `SECURITY_MODEL.md`, `PORTABILITY.md`, `DEVELOPMENT.md`).
+- Repackaged and generated fresh `dist/rup-skill-v3.0.0.zip` and `dist/manifest.json`.
+- Implemented `tests/security/` module to expand regression matrices.
+
+**Next Actions:**
+- Awaiting final acceptance validation of the RUP-skill multi-agent implementation.
