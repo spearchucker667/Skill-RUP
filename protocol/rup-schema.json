@@ -2049,6 +2049,12 @@
             "$ref": "#/$defs/FileChange"
           }
         },
+        "recommendations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorkstreamRecommendation"
+          }
+        },
         "commits": {
           "type": "array",
           "items": {
