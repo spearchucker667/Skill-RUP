@@ -377,3 +377,40 @@ Key Remediations Completed:
 
 ### Next Actions:
 - Push the branch and open a PR; all required status checks (`CI`, `Validate Skill`, `Forward Tests`, `Security Scan`, `package/spec validation`, `Agent Skills validation`) should be required before merge once the workflow names stabilize.
+
+## 2026-08-18 - Session: Forward-Test Inventory Fix & Push
+
+**Agent**: Kimi Code CLI
+**Task**: Fix `runtime/inventory.py` aborting on non-git/invalid forward-test fixtures, verify locally, and push to `main`.
+
+### Accomplishments:
+- Hardened `InventoryManager._get_git_metadata()` to treat git metadata as optional:
+  - Returns defaults immediately when `.git` is absent.
+  - Verifies the target is inside a real worktree with `git rev-parse --is-inside-work-tree` before running history/contributor commands.
+  - Wraps all git calls in a broad `try/except` so an invalid fixture cwd cannot abort the lifecycle.
+- Verified the previously applied `flush=True` timeout test fix and Windows-safe validator output remain intact.
+
+### Files Modified:
+1. `runtime/inventory.py`
+2. `docs/development/summary_of_work.md` (this entry)
+
+### Validation Results:
+- `python -m compileall runtime scripts` → **passed**
+- `python -m pytest tests/ -q` → **50 passed, 3 warnings**
+- `python scripts/forward_test.py --fixtures tests/fixtures` → **Passed: 10/10**
+- `bandit -r runtime scripts -c bandit.yaml` → **No issues identified**
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` → **5 files validated, all passed**
+- `python scripts/build_capability_map.py --check` → **PASS**
+- `git diff --check` → **OK**
+- `git ls-files -s | awk '$1 == "160000" {print}'` → **empty (no malformed gitlinks)**
+
+### Push:
+- Committed as `0b00510 fix(runtime): make git metadata collection resilient for non-repo targets`
+- Pushed to `main`: `c918acb..0b00510`
+
+### Open Blockers:
+- None.
+
+### Next Actions:
+- Monitor GitHub Actions for the new `main` commit to confirm `Forward Tests` and the full matrix complete successfully.
+- If CI surfaces remaining failures, address root cause before further pushes.
