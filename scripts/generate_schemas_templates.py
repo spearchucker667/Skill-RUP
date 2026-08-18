@@ -38,9 +38,52 @@ def main():
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "$id": f"https://spearchucker667.github.io/RUP/schemas/{s_name}.schema.json",
                 "title": f"{s_name.title()} Schema",
+                "$defs": defs,
                 **extracted
             }
-            # Remove refs if they are broken by extraction, for simplicity just let them be or embed
+            json.dump(schema_out, f, indent=2)
+
+    # Extra missing schemas
+    extra_schemas = {
+        "handoff": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+                "blockers": {"type": "array", "items": {"type": "string"}},
+                "next_actions": {"type": "array", "items": {"type": "string"}},
+                "validation_results": {"type": "string"}
+            },
+            "required": ["summary", "next_actions"]
+        },
+        "rollback": {
+            "type": "object",
+            "properties": {
+                "trigger": {"type": "string"},
+                "steps": {"type": "array", "items": {"type": "string"}},
+                "status": {"type": "string", "enum": ["pending", "in_progress", "completed", "failed"]}
+            },
+            "required": ["trigger", "steps", "status"]
+        },
+        "session-state": {
+            "type": "object",
+            "properties": {
+                "current_phase": {"type": "string"},
+                "artifacts_generated": {"type": "array", "items": {"type": "string"}},
+                "timestamp": {"type": "string", "format": "date-time"}
+            },
+            "required": ["current_phase"]
+        }
+    }
+    
+    for s_name, schema_body in extra_schemas.items():
+        path = sch_dir / f"{s_name}.schema.json"
+        with open(path, "w") as f:
+            schema_out = {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "$id": f"https://spearchucker667.github.io/RUP/schemas/{s_name}.schema.json",
+                "title": f"{s_name.title()} Schema",
+                **schema_body
+            }
             json.dump(schema_out, f, indent=2)
 
     # Empty out templates, we don't use them (we generate markdown inline)

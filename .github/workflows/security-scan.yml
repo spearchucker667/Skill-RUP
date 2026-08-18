@@ -1,7 +1,15 @@
 name: Security Scan
-on: [push]
+on: [push, pull_request]
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    - name: Install dependencies
+      run: pip install bandit
+    - name: Run Bandit
+      run: bandit -r runtime/ scripts/ -c "bandit.yaml" || bandit -r runtime/ scripts/

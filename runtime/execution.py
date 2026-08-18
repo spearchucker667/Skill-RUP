@@ -24,45 +24,47 @@ class ExecutionPhase:
         
         # Detect uncommitted changes via git status
         try:
-            status_output = run_command(["git", "status", "--porcelain"], cwd=self.target_dir)
-            for line in status_output.splitlines():
-                if not line.strip():
-                    continue
-                code = line[:2]
-                file_path = line[3:]
-                
-                change_type = "modify"
-                if "??" in code or "A" in code:
-                    change_type = "create"
-                elif "D" in code:
-                    change_type = "delete"
-                elif "R" in code:
-                    change_type = "rename"
+            rc, stdout, stderr = run_command(["git", "status", "--porcelain"], cwd=self.target_dir)
+            if rc == 0:
+                for line in stdout.splitlines():
+                    if not line.strip():
+                        continue
+                    code = line[:2]
+                    file_path = line[3:]
                     
-                changes.append({
-                    "file_path": file_path,
-                    "change_type": change_type,
-                    "rationale": "Detected uncommitted change",
-                    "backlog_item_id": plan_data.get("selected_items", [""])[0] if plan_data.get("selected_items") else "UNKNOWN"
-                })
+                    change_type = "modify"
+                    if "??" in code or "A" in code:
+                        change_type = "create"
+                    elif "D" in code:
+                        change_type = "delete"
+                    elif "R" in code:
+                        change_type = "rename"
+                        
+                    changes.append({
+                        "file_path": file_path,
+                        "change_type": change_type,
+                        "rationale": "Detected uncommitted change",
+                        "backlog_item_id": plan_data.get("selected_items", [""])[0] if plan_data.get("selected_items") else "UNKNOWN"
+                    })
         except Exception:
             pass # Git might not be initialized
             
         # Extract recent commits (last 5)
         try:
-            log_output = run_command(["git", "log", "-n", "5", "--oneline"], cwd=self.target_dir)
-            for line in log_output.splitlines():
-                if not line.strip():
-                    continue
-                parts = line.split(" ", 1)
-                commits.append({
-                    "hash": parts[0],
-                    "message": parts[1] if len(parts) > 1 else "",
-                    "files": [],
-                    "type": "commit",
-                    "breaking": "BREAKING CHANGE" in line,
-                    "backlog_item_ids": []
-                })
+            rc, stdout, stderr = run_command(["git", "log", "-n", "5", "--oneline"], cwd=self.target_dir)
+            if rc == 0:
+                for line in stdout.splitlines():
+                    if not line.strip():
+                        continue
+                    parts = line.split(" ", 1)
+                    commits.append({
+                        "hash": parts[0],
+                        "message": parts[1] if len(parts) > 1 else "",
+                        "files": [],
+                        "type": "commit",
+                        "breaking": "BREAKING CHANGE" in line,
+                        "backlog_item_ids": []
+                    })
         except Exception:
             pass
             

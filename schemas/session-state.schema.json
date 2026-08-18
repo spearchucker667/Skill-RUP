@@ -2,5 +2,23 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spearchucker667.github.io/RUP/schemas/session-state.schema.json",
   "title": "Session-State Schema",
-  "type": "object"
+  "type": "object",
+  "properties": {
+    "current_phase": {
+      "type": "string"
+    },
+    "artifacts_generated": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "current_phase"
+  ]
 }

@@ -23,6 +23,19 @@ def run_forward_test(fixtures_dir: str) -> int:
             print(f"FAILED in phase {phase}:")
             print(res.stderr)
             return 1
+        import json
+        if phase == "verify":
+            verify_json = target / "RUP_VERIFICATION.json"
+            if verify_json.exists():
+                try:
+                    data = json.loads(verify_json.read_text())
+                    if data.get("verification_results", {}).get("overall_status") == "failed":
+                        print(f"FAILED in phase {phase}: overall_status is failed in JSON")
+                        return 1
+                except Exception as e:
+                    print(f"FAILED to parse {verify_json}: {e}")
+                    return 1
+                    
         print(res.stdout)
         
     print("Forward tests PASS: All phases executed successfully.")

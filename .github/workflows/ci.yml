@@ -16,4 +16,4 @@ jobs:
     - name: Run Build Capability Map Check
       run: python scripts/build_capability_map.py --check
     - name: Run RUP Validation
-      run: python scripts/validate_rup.py
+      run: python scripts/validate_rup.py all .

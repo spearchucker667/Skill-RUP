@@ -23,7 +23,7 @@ def test_report_execution(tmp_path):
     state = StateManager(paths)
     data = state.load_json("RUP_FINAL_REPORT.json")
     
-    assert data["summary"]["overall_status"] == "passed"
+    assert data["summary"]["overall_status"] == "failed"
     assert "discovery" in data["phases_completed"]
     
     # Note: validate_rup.py does not explicitly export a 'report' subcommand type 

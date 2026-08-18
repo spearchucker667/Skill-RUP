@@ -2,5 +2,29 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spearchucker667.github.io/RUP/schemas/handoff.schema.json",
   "title": "Handoff Schema",
-  "type": "object"
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "validation_results": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "summary",
+    "next_actions"
+  ]
 }

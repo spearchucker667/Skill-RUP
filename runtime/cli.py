@@ -41,14 +41,15 @@ def run_execute(target_dir: Path):
     phase.execute()
     print("Execution complete. Generated RUP_EXECUTION.json and RUP_EXECUTION.md.")
 
-def run_verify(target_dir: Path):
+def run_verify(target_dir: Path) -> bool:
     paths = RupPaths(target_dir)
     state = StateManager(paths)
     builder = ArtifactBuilder(paths)
     print(f"Starting RUP Verification on {target_dir.resolve()}...")
     phase = VerificationPhase(target_dir, state, builder)
-    phase.execute()
+    out = phase.execute()
     print("Verification complete. Generated RUP_VERIFICATION.json and RUP_VERIFICATION.md.")
+    return out["verification_results"]["overall_status"] == "passed"
 
 def run_report(target_dir: Path):
     paths = RupPaths(target_dir)
@@ -74,7 +75,9 @@ def main():
         elif args.phase == "execute":
             run_execute(args.target)
         elif args.phase == "verify":
-            run_verify(args.target)
+            if not run_verify(args.target):
+                print("Verification failed.")
+                return 1
         elif args.phase == "report":
             run_report(args.target)
         else:
