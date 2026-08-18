@@ -48,7 +48,7 @@ class DiscoveryPhase:
         if not tooling.get("linter"):
             gaps.append({
                 "id": "LINT-001",
-                "category": "quality",
+                "category": "dx",
                 "severity": "medium",
                 "title": "Missing Linter Configuration",
                 "description": f"No linter configuration detected for '{primary_lang}'.",
@@ -61,7 +61,7 @@ class DiscoveryPhase:
         if not tooling.get("type_checker") and primary_lang in ("typescript", "python"):
             gaps.append({
                 "id": "TYPE-001",
-                "category": "quality",
+                "category": "dx",
                 "severity": "low",
                 "title": "Missing Static Type Checking",
                 "description": f"No static type checker (mypy/pyright/tsc) configured for {primary_lang}.",
@@ -94,10 +94,10 @@ class DiscoveryPhase:
             })
 
         # Lockfile Gap
-        for lang_info in languages:
+        for idx, lang_info in enumerate(languages):
             if lang_info["percentage"] > 10.0 and not lang_info.get("lockfile_present"):
                 gaps.append({
-                    "id": f"SEC-LOCK-{lang_info['name'].upper()}",
+                    "id": f"SEC-{100 + idx:03d}",
                     "category": "security",
                     "severity": "high",
                     "title": f"Missing Dependency Lockfile for {lang_info['name'].title()}",
@@ -111,7 +111,7 @@ class DiscoveryPhase:
         # Security Policy
         if not (self.target_dir / "SECURITY.md").exists() and not (self.target_dir / ".github" / "SECURITY.md").exists():
             gaps.append({
-                "id": "SEC-POL-001",
+                "id": "SEC-003",
                 "category": "security",
                 "severity": "medium",
                 "title": "Missing SECURITY.md Policy",
@@ -125,7 +125,7 @@ class DiscoveryPhase:
         # License Compliance
         if metadata.get("license") == "UNKNOWN":
             gaps.append({
-                "id": "GOV-LIC-001",
+                "id": "GOV-002",
                 "category": "governance",
                 "severity": "high",
                 "title": "Missing Open Source License",

@@ -18,6 +18,10 @@ env/
 
 # Distributions
 build/
+dist/package-test/
+
+# Runtime fixture workspaces created by forward tests
+tests/fixtures/
 
 # RUP State & Outputs
 .rup/

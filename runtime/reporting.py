@@ -8,6 +8,7 @@ Implements canonical Phase 4 Reporting & Handoff:
 - Rollback commands
 - Truthful publication instructions (no false PR merge claims)
 """
+import warnings
 from typing import Dict, Any, List
 from pathlib import Path
 from .state import StateManager
@@ -26,8 +27,8 @@ class ReportingPhase:
             rc, stdout, _ = run_command(["git", "branch", "--show-current"], cwd=self.target_dir)
             if rc == 0 and stdout.strip():
                 return stdout.strip()
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.warn(f"Git branch query failed: {e}", RuntimeWarning, stacklevel=2)
         return "local-workspace"
 
     def execute(self) -> Dict[str, Any]:

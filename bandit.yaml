@@ -1,0 +1,10 @@
+# Bandit configuration for Skill-RUP
+# Intentional policy: do not silence categories globally.
+# Narrow suppressions are applied inline in code with a documented rationale.
+
+skips: []
+
+# Severity/confidence thresholds for exit behavior.
+# Any issue at or above these levels causes a non-zero exit.
+severity: LOW
+confidence: LOW

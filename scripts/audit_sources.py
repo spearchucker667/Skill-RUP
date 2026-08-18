@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import json
 import os
+import warnings
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
+
+from runtime.provenance import compute_git_blob_sha
 
 def main():
     root = Path(__file__).parent.parent.resolve()
@@ -43,10 +46,9 @@ def main():
                 abs_filepath = root / filepath.replace(".reference/", ".reference/")
                 if abs_filepath.exists():
                     try:
-                        import subprocess
-                        git_blob_sha = subprocess.check_output(["git", "hash-object", str(abs_filepath)]).decode().strip()
-                    except Exception:
-                        pass
+                        git_blob_sha = compute_git_blob_sha(abs_filepath, cwd=root)
+                    except Exception as e:
+                        warnings.warn(f"Git blob SHA failed for {abs_filepath}: {e}", RuntimeWarning)
                 
                 files_list.append({
                     "path": filepath,
@@ -61,7 +63,7 @@ def main():
                 })
                 
     manifest = {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "canonical_repository": "https://github.com/spearchucker667/RUP-Protocol",
         "canonical_commit": rup_commit,
         "canonical_tree": "0cf45780517f8b981f9b3f33cc238e5c8ba0e2ed", # Placeholder for the exact tree SHA from upstream

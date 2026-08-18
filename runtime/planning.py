@@ -169,9 +169,9 @@ class PlanningPhase:
         breaking_possible = any(item["risk"] == "high" for item in selected_items)
         requires_manual_review = any("SEC-001" in item["id"] or item["risk"] == "high" for item in selected_items)
         
-        rollback_complexity = "low"
+        rollback_complexity = "trivial"
         if len(selected_items) > 5 or breaking_possible:
-            rollback_complexity = "medium"
+            rollback_complexity = "moderate"
 
         return {
             "breaking_changes_possible": breaking_possible,
@@ -197,19 +197,9 @@ class PlanningPhase:
         total_effort = sum(b["estimated_effort_minutes"] for b in selected_items)
 
         plan_data = {
-            "constraints": {
-                "time_budget_minutes": self.time_budget_minutes,
-                "max_files": self.max_files,
-                "risk_tolerance": self.risk_tolerance
-            },
             "backlog": backlog,
             "selected_items": selected_ids,
             "execution_order": execution_order,
-            "checkpoints": [
-                {"id": "CP-1", "description": "Pre-execution baseline snapshot", "after_item": None},
-                {"id": "CP-2", "description": "P0 Critical items implemented", "after_item": execution_order[0] if execution_order else None},
-                {"id": "CP-3", "description": "Full plan execution complete, ready for verification", "after_item": execution_order[-1] if execution_order else None}
-            ],
             "risk_analysis": risk_analysis,
             "estimated_effort": {
                 "total_minutes": total_effort,

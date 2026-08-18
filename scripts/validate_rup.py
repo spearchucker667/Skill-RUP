@@ -4,10 +4,12 @@ RUP Protocol Validator v3.0.0
 
 Validates RUP protocol YAML files and agent outputs against the JSON Schema.
 
-Usage:
-    python validate_rup.py protocol <protocol.yaml>
-    python validate_rup.py output <output.json> <discovery|plan|execution|verification>
-    python validate_rup.py all <directory>
+Canonical usage:
+    python validate_rup.py --schema protocol/rup-schema.json protocol <protocol.yaml>
+    python validate_rup.py --schema protocol/rup-schema.json output <output.json> <discovery|plan|execution|verification>
+    python validate_rup.py --schema protocol/rup-schema.json all <directory>
+
+Backwards-compatible forms are also accepted.
 
 Requirements:
     pip install jsonschema pyyaml
@@ -118,7 +120,9 @@ def load_yaml(file_path: Path) -> Dict[str, Any]:
     """Load a YAML file."""
     _check_file_size(file_path)
     with open(file_path, 'r', encoding='utf-8') as f:
-        return yaml.load(f, Loader=LimitedAliasLoader)
+        # LimitedAliasLoader inherits from SafeLoader; arbitrary Python-object
+        # construction is disabled and alias expansion is capped.
+        return yaml.load(f, Loader=LimitedAliasLoader)  # nosec B506
 
 
 def load_json(file_path: Path) -> Dict[str, Any]:
@@ -366,11 +370,15 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
     
     # Print results
     if not results:
-        print(f"{colorize('Warning:', Colors.YELLOW)} No files found to validate in {directory}")
+        msg = f"FAIL/EMPTY — No expected RUP artifacts discovered in {directory}"
+        print(f"{colorize('✗', Colors.RED)} {colorize(msg, Colors.BOLD)}")
         if parse_errors > 0:
             print(f"  {colorize('⚠', Colors.YELLOW)} Parse errors: {parse_errors}")
             return 1
-        return 0
+        if args.allow_empty:
+            print(f"{colorize('Note:', Colors.YELLOW)} --allow-empty enabled; treating empty scan as success.")
+            return 0
+        return 1
     
     print(f"\n{colorize('Validation Results', Colors.BOLD)}")
     print("=" * 50)
@@ -491,21 +499,41 @@ def cmd_sample(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_common_args(p: argparse.ArgumentParser) -> None:
+    """Add schema and verbose options to a subparser so they can appear after the subcommand."""
+    p.add_argument(
+        '--schema', '-s',
+        type=Path,
+        default=Path(os.getenv('RUP_SCHEMA_PATH')) if os.getenv('RUP_SCHEMA_PATH') else None,
+        help='Path to rup-schema.json (default: same directory as script or RUP_SCHEMA_PATH)'
+    )
+    p.add_argument(
+        '--verbose', '-v',
+        action='store_true',
+        help='Show all validation errors'
+    )
+
+
 def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(
         description="RUP Protocol Validator v3.0.0",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  %(prog)s protocol rup-protocol.yaml
-  %(prog)s output discovery.json discovery
-  %(prog)s output plan.json plan
-  %(prog)s all ./my-project
-  %(prog)s sample discovery -o sample_discovery.json
+Canonical examples:
+  %(prog)s --schema protocol/rup-schema.json protocol rup-protocol.yaml
+  %(prog)s --schema protocol/rup-schema.json output discovery.json discovery
+  %(prog)s --schema protocol/rup-schema.json output plan.json plan
+  %(prog)s --schema protocol/rup-schema.json all ./my-project
+  %(prog)s --schema protocol/rup-schema.json sample discovery -o sample_discovery.json
+
+Backwards-compatible examples:
+  %(prog)s protocol rup-protocol.yaml --schema protocol/rup-schema.json
+  %(prog)s all ./my-project --schema protocol/rup-schema.json
         """
     )
-    
+
+    # Global options are canonical; also accept them after subcommands for compatibility.
     parser.add_argument(
         '--schema', '-s',
         type=Path,
@@ -517,13 +545,14 @@ Examples:
         action='store_true',
         help='Show all validation errors'
     )
-    
+
     subparsers = parser.add_subparsers(dest='command', help='Commands')
-    
+
     # Protocol validation
     protocol_parser = subparsers.add_parser('protocol', help='Validate a protocol YAML file')
     protocol_parser.add_argument('file', help='Path to protocol YAML file')
-    
+    _add_common_args(protocol_parser)
+
     # Output validation
     output_parser = subparsers.add_parser('output', help='Validate an agent output JSON file')
     output_parser.add_argument('file', help='Path to output JSON file')
@@ -532,11 +561,18 @@ Examples:
         choices=['discovery', 'plan', 'execution', 'verification'],
         help='Type of output'
     )
-    
+    _add_common_args(output_parser)
+
     # All validation
     all_parser = subparsers.add_parser('all', help='Validate all files in a directory')
     all_parser.add_argument('directory', help='Directory to scan')
-    
+    all_parser.add_argument(
+        '--allow-empty',
+        action='store_true',
+        help='Allow zero discovered artifacts to validate (not for CI)'
+    )
+    _add_common_args(all_parser)
+
     # Sample generation
     sample_parser = subparsers.add_parser('sample', help='Generate sample output files')
     sample_parser.add_argument(
@@ -548,6 +584,7 @@ Examples:
         '-o', '--output',
         help='Output file path'
     )
+    _add_common_args(sample_parser)
     
     args = parser.parse_args()
     

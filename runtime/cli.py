@@ -4,7 +4,7 @@ CLI entry point for RUP deterministic runtime.
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from .paths import RupPaths
 from .state import StateManager
@@ -68,7 +68,7 @@ def run_verify(target_dir: Path, state_dir: Optional[Path] = None, run_id: Optio
     state = StateManager(paths, run_id=run_id)
     builder = ArtifactBuilder(paths)
     print(f"[RUP] Starting Multi-Gate Verification...")
-    phase = VerificationPhase(target_dir, state, builder)
+    phase = VerificationPhase(target_dir, state, builder, strict=strict)
     out = phase.execute()
     state.update_session_state("verification")
     status = out["verification_results"]["overall_status"]
@@ -76,6 +76,15 @@ def run_verify(target_dir: Path, state_dir: Optional[Path] = None, run_id: Optio
     if strict:
         return status == "passed"
     return status in ("passed", "passed_with_warnings")
+
+def run_migrate(target_dir: Path, state_dir: Optional[Path] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
+    paths = RupPaths(target_dir, state_dir=state_dir)
+    state = StateManager(paths, run_id=run_id)
+    print(f"[RUP] Migrating legacy root-level state into {paths.state_dir}...")
+    result = state.migrate_legacy_state()
+    print(f"[RUP] Migration complete. {result['count']} artifact(s) imported with provenance.")
+    return result
+
 
 def run_report(target_dir: Path, state_dir: Optional[Path] = None, run_id: Optional[str] = None):
     paths = RupPaths(target_dir, state_dir=state_dir)
@@ -122,7 +131,7 @@ def run_full_lifecycle(
 
 def main():
     parser = argparse.ArgumentParser(description=f"Skill-RUP CLI (Runtime v{__version__}, Protocol v{__protocol_version__})")
-    parser.add_argument("phase", choices=["discovery", "plan", "execute", "verify", "report", "run", "all"], help="Phase or full lifecycle to execute")
+    parser.add_argument("phase", choices=["discovery", "plan", "execute", "verify", "report", "run", "migrate", "all"], help="Phase or full lifecycle to execute")
     parser.add_argument("--target", type=Path, default=Path("."), help="Target repository directory")
     parser.add_argument("--state-dir", type=Path, default=None, help="Directory to store state and artifacts (default: <target>/.rup)")
     parser.add_argument("--time-budget", type=int, default=45, help="Time budget in minutes for planning")
@@ -161,6 +170,8 @@ def main():
                 return 1
         elif args.phase == "report":
             run_report(args.target, state_dir=args.state_dir)
+        elif args.phase == "migrate":
+            run_migrate(args.target, state_dir=args.state_dir)
     except Exception as e:
         print(f"[RUP] Fatal error during {args.phase}: {e}", file=sys.stderr)
         return 1

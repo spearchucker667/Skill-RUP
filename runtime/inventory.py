@@ -4,6 +4,7 @@ Performs accurate file inventory, language detection, LOC counting, git history 
 """
 import os
 import re
+import warnings
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from collections import defaultdict
@@ -88,8 +89,8 @@ class InventoryManager:
                 if lang:
                     counts[lang] += lines
                     file_counts[lang] += 1
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(f"Inventory line-count failed for {file_path}: {e}", RuntimeWarning, stacklevel=2)
 
         # Language breakdown
         languages = []
@@ -155,8 +156,8 @@ class InventoryManager:
             if rc == 0 and stdout.strip():
                 contributors = len(stdout.strip().splitlines())
                 meta["contributors"] = max(1, contributors)
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.warn(f"Git metadata query failed: {e}", RuntimeWarning, stacklevel=2)
 
         return meta
 
@@ -183,8 +184,8 @@ class InventoryManager:
                     if "BSD 2-Clause" in content:
                         return "BSD-2-Clause"
                     return "Custom / Identified"
-                except Exception:
-                    pass
+                except Exception as e:
+                    warnings.warn(f"License read failed for {p}: {e}", RuntimeWarning, stacklevel=2)
         return "UNKNOWN"
 
     def _classify_repo_type(self, languages: List[Dict[str, Any]]) -> str:
@@ -210,8 +211,8 @@ class InventoryManager:
                 if "main" in data or "module" in data or "types" in data:
                     if not (self.target_dir / "src" / "index.html").exists():
                         return "library"
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(f"package.json classification failed: {e}", RuntimeWarning, stacklevel=2)
 
         if (self.target_dir / "Cargo.toml").exists():
             if (self.target_dir / "src" / "lib.rs").exists() and not (self.target_dir / "src" / "main.rs").exists():

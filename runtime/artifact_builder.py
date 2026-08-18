@@ -218,7 +218,8 @@ class ArtifactBuilder:
 | Scanner | Executed | Status | Findings |
 |---------|----------|--------|----------|
 | Secret Scanner | {'Yes' if sec.get('secret_scan', {}).get('executed') else 'No'} | {'PASSED' if sec.get('secret_scan', {}).get('passed') else 'FAILED'} | {sec.get('secret_scan', {}).get('findings', 0)} |
-| SAST Injection Defense | {'Yes' if sec.get('sast_scan', {}).get('executed') else 'No'} | {'PASSED' if sec.get('sast_scan', {}).get('passed') else 'FAILED'} | {sec.get('sast_scan', {}).get('findings', 0)} |
+| Prompt Injection Defense | {'Yes' if sec.get('prompt_injection_scan', {}).get('executed') else 'No'} | {'PASSED' if sec.get('prompt_injection_scan', {}).get('passed') else 'FAILED'} | {sec.get('prompt_injection_scan', {}).get('findings', 0)} |
+| SAST | {'Yes' if sec.get('sast_scan', {}).get('executed') else 'No'} | {'PASSED' if sec.get('sast_scan', {}).get('passed') else 'FAILED'} | {sec.get('sast_scan', {}).get('findings', 0)} |
 | Dependency Vulnerabilities | {'Yes' if sec.get('dependency_scan', {}).get('executed') else 'No'} | {'PASSED' if sec.get('dependency_scan', {}).get('passed') else 'FAILED'} | {sec.get('dependency_scan', {}).get('critical', 0)} critical |
 
 ## Lint Verification

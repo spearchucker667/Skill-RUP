@@ -11,10 +11,12 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: "3.11"
-    - name: Install Bandit
-      run: pip install bandit
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-ci.txt
     - name: Run Bandit
-      run: bandit -r runtime/ scripts/ -c "bandit.yaml" || bandit -r runtime/ scripts/
+      run: bandit -r runtime scripts -c bandit.yaml
 
   codeql:
     name: CodeQL Security Analysis
@@ -25,6 +27,9 @@ jobs:
       contents: read
     steps:
     - uses: actions/checkout@v4
-    - uses: github/codeql-action/init@v3
-    - uses: github/codeql-action/autobuild@v3
-    - uses: github/codeql-action/analyze@v3
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: python
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4

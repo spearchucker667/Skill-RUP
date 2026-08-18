@@ -9,12 +9,20 @@ class RupPaths:
     def __init__(self, target_dir: Path, state_dir: Optional[Path] = None):
         self.skill_root = Path(__file__).parent.parent.resolve()
         self.target_dir = target_dir.resolve()
-        
+
         if not self.target_dir.is_dir():
             raise NotADirectoryError(f"Target directory not found: {self.target_dir}")
 
         if state_dir is not None:
-            self.state_dir = state_dir.resolve()
+            resolved_state = state_dir.resolve()
+            # Custom state directories must remain inside the target repository.
+            try:
+                resolved_state.relative_to(self.target_dir)
+            except ValueError:
+                raise PermissionError(
+                    f"State directory must resolve inside the target repository: {resolved_state}"
+                )
+            self.state_dir = resolved_state
         else:
             self.state_dir = self.target_dir / ".rup"
 

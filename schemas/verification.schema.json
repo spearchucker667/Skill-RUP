@@ -2268,6 +2268,12 @@
             "findings": {
               "type": "integer",
               "minimum": 0
+            },
+            "tool": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
             }
           }
         },
@@ -2295,6 +2301,33 @@
             "low": {
               "type": "integer",
               "minimum": 0
+            },
+            "tool": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          }
+        },
+        "prompt_injection_scan": {
+          "type": "object",
+          "properties": {
+            "executed": {
+              "type": "boolean"
+            },
+            "passed": {
+              "type": "boolean"
+            },
+            "findings": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tool": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
             }
           }
         },
@@ -2310,6 +2343,12 @@
             "findings": {
               "type": "integer",
               "minimum": 0
+            },
+            "tool": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
             }
           }
         }

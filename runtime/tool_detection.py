@@ -3,6 +3,7 @@ Deep ecosystem tooling detection for RUP runtime.
 Covers Python, JS/TS, Go, Rust, CI/CD, Containers, IaC, and Monorepos.
 """
 import json
+import warnings
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -34,8 +35,8 @@ class ToolDetector:
                 content = (self.target_dir / "pyproject.toml").read_text(encoding="utf-8", errors="ignore")
                 if "tool.pytest" in content or "pytest" in content:
                     return "pytest"
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
         if list(self.target_dir.glob("**/test_*.py")) or list(self.target_dir.glob("**/*_test.py")):
             return "pytest"
 
@@ -54,8 +55,8 @@ class ToolDetector:
                     return "mocha"
                 if "test" in scripts:
                     return "npm-test"
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
 
         if list(self.target_dir.glob("jest.config.*")):
             return "jest"
@@ -84,8 +85,8 @@ class ToolDetector:
                     return "ruff"
                 if "tool.flake8" in content:
                     return "flake8"
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
         if (self.target_dir / ".flake8").exists():
             return "flake8"
 
@@ -99,8 +100,8 @@ class ToolDetector:
                 deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
                 if "eslint" in deps:
                     return "eslint"
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
 
         # Rust / Go
         if (self.target_dir / "Cargo.toml").exists():
@@ -121,8 +122,8 @@ class ToolDetector:
                     return "black"
                 if "tool.ruff" in c:
                     return "ruff"
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
         return None
 
     def detect_type_checker(self) -> Optional[str]:
@@ -136,8 +137,8 @@ class ToolDetector:
                 c = (self.target_dir / "pyproject.toml").read_text(encoding="utf-8", errors="ignore")
                 if "tool.mypy" in c or "tool.pyright" in c:
                     return "mypy"
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
         return None
 
     def detect_ci_platform(self) -> Optional[str]:
@@ -152,25 +153,30 @@ class ToolDetector:
             return "azure_pipelines"
         return None
 
-    def detect_containerization(self) -> Dict[str, Any]:
-        """Detect Docker, Kubernetes, Helm."""
+    def detect_containerization(self) -> Optional[str]:
+        """Detect containerization tooling as a single string value."""
         has_docker = (self.target_dir / "Dockerfile").exists() or (self.target_dir / "Containerfile").exists()
         has_compose = any((self.target_dir / f).exists() for f in ["docker-compose.yml", "docker-compose.yaml", "compose.yaml", "compose.yml"])
         has_k8s = (self.target_dir / "k8s").is_dir() or (self.target_dir / "kubernetes").is_dir() or (self.target_dir / "Chart.yaml").exists()
-        return {
-            "docker": has_docker,
-            "docker_compose": has_compose,
-            "kubernetes": has_k8s
-        }
 
-    def detect_iac(self) -> List[str]:
-        """Detect Infrastructure as Code tools."""
+        parts = []
+        if has_docker:
+            parts.append("docker")
+        if has_compose:
+            parts.append("docker-compose")
+        if has_k8s:
+            parts.append("kubernetes")
+
+        return ",".join(parts) if parts else None
+
+    def detect_iac(self) -> Optional[str]:
+        """Detect Infrastructure as Code tooling as a single string value."""
         tools = []
         if list(self.target_dir.glob("*.tf")) or list(self.target_dir.glob("terraform/**/*.tf")):
             tools.append("terraform")
         if (self.target_dir / "Pulumi.yaml").exists() or (self.target_dir / "Pulumi.yml").exists():
             tools.append("pulumi")
-        return tools
+        return ",".join(tools) if tools else None
 
     def detect_monorepo(self) -> Dict[str, Any]:
         """Detect monorepo tooling and structure."""
@@ -199,8 +205,8 @@ class ToolDetector:
                 if "[workspace]" in c:
                     is_mono = True
                     kind = "cargo-workspace"
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
 
         pkg_dir = self.target_dir / "packages"
         if pkg_dir.is_dir():

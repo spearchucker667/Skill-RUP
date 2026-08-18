@@ -16,11 +16,15 @@ def compute_sha256(file_path: Path) -> str:
     return h.hexdigest()
 
 def compute_git_blob_sha(file_path: Path, cwd: Optional[Path] = None) -> str:
-    """Compute Git blob SHA (100% equivalent to git hash-object)."""
+    """Compute Git blob SHA (100% equivalent to git hash-object).
+
+    SHA-1 is used here only to reproduce Git's object identifier for
+    provenance/lineage comparison, not for any security purpose.
+    """
     try:
         data = file_path.read_bytes()
         header = f"blob {len(data)}\0".encode("ascii")
-        return hashlib.sha1(header + data).hexdigest()
+        return hashlib.sha1(header + data, usedforsecurity=False).hexdigest()
     except Exception:
         if cwd is None:
             cwd = file_path.parent

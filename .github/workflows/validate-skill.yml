@@ -10,6 +10,51 @@ jobs:
       with:
         python-version: "3.11"
     - name: Install dependencies
-      run: pip install pyyaml jsonschema
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-ci.txt
     - name: Run validate_rup.py
-      run: python scripts/validate_rup.py all . --schema protocol/rup-schema.json
+      run: python scripts/validate_rup.py --schema protocol/rup-schema.json all .
+    - name: Check progressive-disclosure references
+      run: |
+        python - <<'PY'
+        import re
+        import sys
+        from pathlib import Path
+
+        skill = Path("SKILL.md").read_text(encoding="utf-8")
+        # Strip YAML front matter before scanning Markdown body.
+        if skill.startswith("---"):
+            _, _, body = skill.partition("---")
+            skill = body
+
+        missing = []
+        # Match both Markdown links [text](path) and bare path mentions.
+        patterns = [
+            re.compile(r"\]\((workflows/[^)]+)\)"),
+            re.compile(r"\]\((references/[^)]+)\)"),
+            re.compile(r"(?<![\](])\b(workflows/[\w/.-]+\.md)"),
+            re.compile(r"(?<![\](])\b(references/[\w/.-]+\.md)"),
+        ]
+        seen = set()
+        for pat in patterns:
+            for m in pat.findall(skill):
+                if m in seen:
+                    continue
+                seen.add(m)
+                if not Path(m).exists():
+                    missing.append(m)
+
+        if missing:
+            print("SKILL.md references missing paths:", file=sys.stderr)
+            for m in missing:
+                print(f"  - {m}", file=sys.stderr)
+            sys.exit(1)
+        print("All SKILL.md progressive-disclosure references exist.")
+        PY
+    - name: Validate Agent Skills package
+      run: |
+        set -e
+        mkdir -p /tmp/skill-src
+        cp -r . /tmp/skill-src/rup
+        skills-ref validate /tmp/skill-src/rup

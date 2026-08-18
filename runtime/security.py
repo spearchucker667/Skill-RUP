@@ -50,7 +50,9 @@ def safe_load_yaml(file_path: Path, max_bytes: int = MAX_FILE_BYTES):
     if file_path.stat().st_size > max_bytes:
         raise ValueError(f"File too large: {file_path}")
     with open(file_path, "r", encoding="utf-8") as f:
-        return yaml.load(f, Loader=LimitedAliasLoader)
+        # LimitedAliasLoader inherits from yaml.SafeLoader and prevents both
+        # arbitrary object construction and YAML alias bombs.
+        return yaml.load(f, Loader=LimitedAliasLoader)  # nosec B506
 
 def safe_load_json(file_path: Path, max_bytes: int = MAX_FILE_BYTES) -> Any:
     """Load JSON with file size guardrails."""

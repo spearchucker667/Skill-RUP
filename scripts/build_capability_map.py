@@ -8,6 +8,7 @@ import sys
 import json
 import argparse
 import ast
+import subprocess  # nosec B404
 from pathlib import Path
 
 # Add repo root to sys.path
@@ -16,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 
 from runtime.capability_map import CANONICAL_CAPABILITIES, verify_capabilities
 from runtime.source_authority import SOURCE_AUTHORITY
+
 
 def verify_python_symbols(py_path: Path, required_symbols: list) -> bool:
     """Parse Python AST and ensure all required classes/functions exist and are non-empty."""
@@ -34,6 +36,7 @@ def verify_python_symbols(py_path: Path, required_symbols: list) -> bool:
     except Exception:
         return False
 
+
 def verify_markdown_sections(md_path: Path, min_lines: int = 15) -> bool:
     """Ensure workflow markdown exists, is non-trivial, and contains required sections."""
     if not md_path.exists():
@@ -44,6 +47,55 @@ def verify_markdown_sections(md_path: Path, min_lines: int = 15) -> bool:
         return len(lines) >= min_lines
     except Exception:
         return False
+
+
+def _run_pytest_node(skill_root: Path, node_id: str) -> bool:
+    """Run a single pytest node and return True if it passes."""
+    try:
+        # node_id comes from the controlled CANONICAL_CAPABILITIES list; shell=False
+        # and the executable path are fixed, so untrusted command injection is not
+        # possible here.
+        proc = subprocess.run(  # nosec B603
+            [sys.executable, "-m", "pytest", node_id, "-v"],
+            cwd=str(skill_root),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
+def determine_verification_level(
+    files_exist: bool,
+    symbols_verified: bool,
+    behavioral_tests: list,
+    skill_root: Path
+) -> str:
+    """
+    Determine the verification level for a capability.
+
+    Levels:
+      - present: implementation files exist.
+      - structurally_verified: AST symbols exist.
+      - behaviorally_verified: listed behavioral tests pass.
+      - canonical_parity_verified: never auto-claimed; reserved for manual override.
+    """
+    if not files_exist:
+        return "unverified"
+
+    if not symbols_verified:
+        return "present"
+
+    if behavioral_tests:
+        all_pass = all(_run_pytest_node(skill_root, node) for node in behavioral_tests)
+        if all_pass:
+            return "behaviorally_verified"
+        return "structurally_verified"
+
+    return "structurally_verified"
+
 
 def main():
     parser = argparse.ArgumentParser(description="Build and verify Skill-RUP capability lineage")
@@ -59,6 +111,7 @@ def main():
         title = cap.get("name", cid)
         modules = cap.get("modules", [])
         req_symbols = cap.get("symbols", [])
+        behavioral_tests = cap.get("behavioral_tests", [])
 
         impl_files = [m.replace(".", "/") + ".py" for m in modules]
         all_files_exist = True
@@ -86,10 +139,12 @@ def main():
         else:
             symbols_verified = False
 
+        verification_level = determine_verification_level(
+            all_files_exist, symbols_verified, behavioral_tests, ROOT
+        )
 
-        is_verified = all_files_exist and symbols_verified
+        is_verified = verification_level in ("structurally_verified", "behaviorally_verified")
         port_status = "ported" if is_verified else "incomplete"
-        semantic_equiv = "preserved" if is_verified else "unverified"
 
         record = {
             "id": cid,
@@ -97,10 +152,11 @@ def main():
             "title": title,
             "mandatory": True,
             "port_status": port_status,
+            "verification_level": verification_level,
             "implementation": impl_files,
             "required_symbols": req_symbols,
+            "behavioral_tests": behavioral_tests,
             "translation_type": "agent-native-deterministic",
-            "semantic_equivalence": semantic_equiv,
             "canonical_source": {
                 "repository": SOURCE_AUTHORITY["canonical_repo"],
                 "version": SOURCE_AUTHORITY["canonical_version"],
@@ -111,7 +167,6 @@ def main():
 
         if not is_verified:
             failed_capabilities.append(record)
-
 
     # Save machine-readable lineage
     prov_dir = ROOT / "provenance"
@@ -126,26 +181,27 @@ def main():
         f.write(f"# Skill-RUP Capability Mapping & Provenance\n\n")
         f.write(f"**Canonical Source**: `{SOURCE_AUTHORITY['canonical_repo']}` (v{SOURCE_AUTHORITY['canonical_version']} @ `{SOURCE_AUTHORITY['canonical_commit'][:8]}`)\n\n")
         f.write(f"**Total Capabilities**: {len(lineage)} | **Ported & Verified**: {len(lineage) - len(failed_capabilities)} | **Incomplete**: {len(failed_capabilities)}\n\n")
-        f.write("| Capability ID | Title | Implementation | Status | Semantic Equivalence |\n")
-        f.write("|---------------|-------|----------------|--------|-----------------------|\n")
+        f.write("| Capability ID | Title | Implementation | Status | Verification Level | Behavioral Tests |\n")
+        f.write("|---------------|-------|----------------|--------|--------------------|------------------|\n")
         for l in lineage:
             impl_str = ", ".join(f"`{f}`" for f in l["implementation"])
-            f.write(f"| `{l['id']}` | {l['title']} | {impl_str} | {l['port_status'].upper()} | {l['semantic_equivalence'].upper()} |\n")
+            tests_str = ", ".join(f"`{t}`" for t in l["behavioral_tests"]) if l["behavioral_tests"] else "—"
+            f.write(f"| `{l['id']}` | {l['title']} | {impl_str} | {l['port_status'].upper()} | {l['verification_level']} | {tests_str} |\n")
 
     print(f"[RUP] Generated capability lineage for {len(lineage)} canonical capabilities.")
     print(f"[RUP] Verified: {len(lineage) - len(failed_capabilities)} | Incomplete: {len(failed_capabilities)}")
 
     if args.check:
         if failed_capabilities:
-            print(f"FAILED: {len(failed_capabilities)} capabilities failed AST symbol verification:", file=sys.stderr)
+            print(f"FAILED: {len(failed_capabilities)} capabilities failed verification:", file=sys.stderr)
             for fc in failed_capabilities:
-                print(f"  - {fc['id']}: {fc['title']} (Files: {fc['implementation']}, Symbols: {fc['required_symbols']})", file=sys.stderr)
+                print(f"  - {fc['id']}: {fc['title']} (level: {fc['verification_level']}, files: {fc['implementation']}, symbols: {fc['required_symbols']})", file=sys.stderr)
             return 1
-        print("PASS: All canonical capabilities are ported and AST symbol verified.")
+        print("PASS: All canonical capabilities are structurally or behaviorally verified.")
         return 0
 
     return 0
 
+
 if __name__ == "__main__":
     sys.exit(main())
-
