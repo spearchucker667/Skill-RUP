@@ -26,7 +26,8 @@ def test_missing_executable(tmp_path):
 
 def test_timeout_with_textual_stdout(tmp_path):
     rc, stdout, stderr = run_command(
-        ["python", "-c", "import time; print('start'); time.sleep(10)"],
+        # Flush stdout so the partial output is captured before the timeout.
+        ["python", "-c", "import time; print('start', flush=True); time.sleep(10)"],
         cwd=tmp_path,
         timeout=1,
     )

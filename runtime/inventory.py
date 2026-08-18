@@ -140,9 +140,15 @@ class InventoryManager:
         return False
 
     def _get_git_metadata(self) -> Dict[str, Any]:
-        """Query git history if repository is version-controlled."""
+        """Query git history if repository is version-controlled.
+
+        Degrades gracefully for fixture directories, non-git targets, or any
+        git command failure. Inventory generation must never abort the run.
+        """
         meta = {"contributors": 1, "last_commit": "N/A"}
-        if not (self.target_dir / ".git").is_dir():
+
+        git_dir = self.target_dir / ".git"
+        if not git_dir.exists():
             return meta
 
         try:
@@ -157,7 +163,9 @@ class InventoryManager:
                 contributors = len(stdout.strip().splitlines())
                 meta["contributors"] = max(1, contributors)
         except Exception as e:
+            # Keep inventory resilient for fixtures and non-repo targets.
             warnings.warn(f"Git metadata query failed: {e}", RuntimeWarning, stacklevel=2)
+            return meta
 
         return meta
 

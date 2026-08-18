@@ -91,6 +91,21 @@ def colorize(text: str, color: str) -> str:
     return text
 
 
+def _supports_unicode() -> bool:
+    """Return True if stdout is configured for UTF-8; otherwise use ASCII fallbacks."""
+    try:
+        encoding = getattr(sys.stdout, "encoding", "") or ""
+        return "utf" in encoding.lower()
+    except Exception:
+        return False
+
+
+# Status symbols: Unicode when supported, ASCII fallbacks for constrained encodings.
+CHECK = "✓" if _supports_unicode() else "OK"
+CROSS = "✗" if _supports_unicode() else "FAIL"
+WARN = "⚠" if _supports_unicode() else "WARN"
+
+
 def load_schema(schema_path: Optional[Path] = None) -> Dict[str, Any]:
     """Load the RUP JSON Schema."""
     if schema_path is not None:
@@ -142,7 +157,7 @@ def format_validation_error(error: ValidationError, indent: int = 0) -> str:
     schema_path = ".".join(str(p) for p in error.schema_path)
     
     lines = [
-        f"{prefix}{colorize('✗', Colors.RED)} {colorize(path, Colors.CYAN)}",
+        f"{prefix}{colorize(CROSS, Colors.RED)} {colorize(path, Colors.CYAN)}",
         f"{prefix}  Message: {error.message}",
     ]
     
@@ -243,9 +258,9 @@ def print_result(
 ) -> None:
     """Print validation result."""
     if valid:
-        print(f"{colorize('✓', Colors.GREEN)} {colorize(str(file_path), Colors.BOLD)}: {colorize('Valid', Colors.GREEN)}")
+        print(f"{colorize(CHECK, Colors.GREEN)} {colorize(str(file_path), Colors.BOLD)}: {colorize('Valid', Colors.GREEN)}")
     else:
-        print(f"{colorize('✗', Colors.RED)} {colorize(str(file_path), Colors.BOLD)}: {colorize('Invalid', Colors.RED)}")
+        print(f"{colorize(CROSS, Colors.RED)} {colorize(str(file_path), Colors.BOLD)}: {colorize('Invalid', Colors.RED)}")
         print(f"  Found {len(errors)} error(s):")
         
         # Show first 10 errors by default, all if verbose
@@ -371,9 +386,9 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
     # Print results
     if not results:
         msg = f"FAIL/EMPTY — No expected RUP artifacts discovered in {directory}"
-        print(f"{colorize('✗', Colors.RED)} {colorize(msg, Colors.BOLD)}")
+        print(f"{colorize(CROSS, Colors.RED)} {colorize(msg, Colors.BOLD)}")
         if parse_errors > 0:
-            print(f"  {colorize('⚠', Colors.YELLOW)} Parse errors: {parse_errors}")
+            print(f"  {colorize(WARN, Colors.YELLOW)} Parse errors: {parse_errors}")
             return 1
         if args.allow_empty:
             print(f"{colorize('Note:', Colors.YELLOW)} --allow-empty enabled; treating empty scan as success.")
@@ -395,10 +410,10 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
     
     print("=" * 50)
     print(f"Total: {total_valid + total_invalid} files")
-    print(f"  {colorize('✓', Colors.GREEN)} Valid: {total_valid}")
-    print(f"  {colorize('✗', Colors.RED)} Invalid: {total_invalid}")
+    print(f"  {colorize(CHECK, Colors.GREEN)} Valid: {total_valid}")
+    print(f"  {colorize(CROSS, Colors.RED)} Invalid: {total_invalid}")
     if parse_errors > 0:
-        print(f"  {colorize('⚠', Colors.YELLOW)} Parse errors: {parse_errors}")
+        print(f"  {colorize(WARN, Colors.YELLOW)} Parse errors: {parse_errors}")
     
     return 0 if (total_invalid == 0 and parse_errors == 0) else 1
 
@@ -495,7 +510,7 @@ def cmd_sample(args: argparse.Namespace) -> int:
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(sample, f, indent=2)
     
-    print(f"{colorize('✓', Colors.GREEN)} Created sample {output_type} output: {output_path}")
+    print(f"{colorize(CHECK, Colors.GREEN)} Created sample {output_type} output: {output_path}")
     return 0
 
 
