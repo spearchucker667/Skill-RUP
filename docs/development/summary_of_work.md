@@ -414,3 +414,34 @@ Key Remediations Completed:
 ### Next Actions:
 - Monitor GitHub Actions for the new `main` commit to confirm `Forward Tests` and the full matrix complete successfully.
 - If CI surfaces remaining failures, address root cause before further pushes.
+
+## 2026-08-18 - Session: AGENTS.md Refresh from Project Audit
+
+**Agent**: Kimi Code CLI
+**Task**: Explore the project structure, technology stack, conventions, tests, and deployment processes; rewrite `AGENTS.md` as a single coherent, up-to-date file for future AI coding agents.
+
+### Accomplishments:
+- Read the existing `AGENTS.md`, `SKILL.md`, `README.md`, all `runtime/` modules, key `scripts/`, GitHub Actions workflows, tests, and documentation.
+- Verified the project has no root package manifest (`pyproject.toml`, `setup.py`, `package.json`, etc.); it runs as a Python package/module.
+- Captured exact dependency list from `requirements-ci.txt` and exact CI commands from `.github/workflows/`.
+- Confirmed canonical authority hierarchy (`protocol/` > `SKILL.md` > `runtime/`) and pinned upstream commit.
+- Documented the lifecycle phases, state directory rules, artifact formats, security model, generated-file policy, testing strategy, and release process.
+- Replaced the previous 21-line `AGENTS.md` with a comprehensive agent-onboarding guide covering project overview, technology stack, directory layout, runtime architecture, build/test commands, CLI usage, code style, testing strategy, generated-file policy, security considerations, CI, and release process.
+
+### Files Modified:
+1. `AGENTS.md` (rewritten)
+2. `docs/development/summary_of_work.md` (this entry)
+
+### Validation Results:
+- `python -m compileall runtime scripts` → passed
+- `python -m pytest tests/ -q` → 50 passed, 3 warnings
+- `python scripts/build_capability_map.py --check` → PASS: All 19 canonical capabilities ported
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` → 5 files validated, all passed
+- `python scripts/forward_test.py --fixtures tests/fixtures` → Passed: 10/10
+- `bandit -r runtime scripts -c bandit.yaml` → No issues identified
+
+### Open Blockers:
+- None.
+
+### Next Actions:
+- No further work required for this handoff.
