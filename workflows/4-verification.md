@@ -1,168 +1,63 @@
-# 4 Verification Workflow
+# 4 Verification & reporting Workflow
 
 ## Purpose
-No description provided.
+Verification & Reporting
 
 ## Canonical Rules & Process
-1. **Test Verification**: 
-1. **Lint Verification**: 
-1. **Security Verification**: 
-1. **Build Verification**: 
-1. **Documentation Verification**: 
-1. **Report Generation**: 
+1. **Test Verification**: Run full test suite 3x Measure coverage before/after Check for flaky tests Verify new tests pass
+1. **Lint Verification**: Run linter Count violations before/after Verify no new violations
+1. **Security Verification**: Run secret scanner Run dependency scanner Run SAST Verify no new findings
+1. **Build Verification**: Run build Check for warnings Verify artifacts
+1. **Documentation Verification**: Verify all links Check code examples Test setup instructions
+1. **Report Generation**: Calculate all metrics Generate summary List followups Provide rollback instructions Generate PR description
 
 ## Raw Protocol Data
 ```yaml
-agent: verification_agent
 id: phase_4_verification
 name: Verification & Reporting
-output_template: '# VERIFICATION REPORT
-
-
-  ## Overall Status: {status}
-
-
-  ## Test Results
-
-  | Metric | Before | After | Delta | Target | Status |
-
-  |--------|--------|-------|-------|--------|--------|
-
-  | Coverage | {before}% | {after}% | {delta}% | +5% | {status} |
-
-  | Passing | {before} | {after} | {delta} | 100% | {status} |
-
-  | Flaky | {before} | {after} | {delta} | 0 | {status} |
-
-
-  ## Security Results
-
-  | Scan | Status | Findings |
-
-  |------|--------|----------|
-
-  | Secrets | {status} | {count} |
-
-  | Dependencies | {status} | {count} |
-
-  | SAST | {status} | {count} |
-
-
-  ## Lint Results
-
-  - **Before**: {before} violations
-
-  - **After**: {after} violations
-
-  - **New**: {new} violations
-
-
-  ## Build Results
-
-  - **Status**: {status}
-
-  - **Warnings**: {warnings}
-
-  - **Duration**: {duration}
-
-
-  ---
-
-
-  # FINAL REPORT
-
-
-  ## Executive Summary
-
-  {summary}
-
-
-  ## Changes Made
-
-  {changes_summary}
-
-
-  ## Metrics
-
-  {metrics_table}
-
-
-  ## Assumptions
-
-  {assumptions}
-
-
-  ## Known Limitations
-
-  {limitations}
-
-
-  ## Follow-ups
-
-  {followups}
-
-
-  ## Rollback Procedure
-
-  ```bash
-
-  {rollback_commands}
-
-  ```
-
-
-  ## PR Ready
-
-  - **Title**: {pr_title}
-
-  - **Labels**: {pr_labels}
-
-  - **Description**: {pr_description}
-
-  '
+agent: verification_agent
+timeout_minutes: 15
 steps:
-- actions:
+- id: '4.1'
+  name: Test Verification
+  actions:
   - Run full test suite 3x
   - Measure coverage before/after
   - Check for flaky tests
   - Verify new tests pass
-  id: '4.1'
-  name: Test Verification
-- actions:
+- id: '4.2'
+  name: Lint Verification
+  actions:
   - Run linter
   - Count violations before/after
   - Verify no new violations
-  id: '4.2'
-  name: Lint Verification
-- actions:
+- id: '4.3'
+  name: Security Verification
+  actions:
   - Run secret scanner
   - Run dependency scanner
   - Run SAST
   - Verify no new findings
-  id: '4.3'
-  name: Security Verification
-- actions:
+- id: '4.4'
+  name: Build Verification
+  actions:
   - Run build
   - Check for warnings
   - Verify artifacts
-  id: '4.4'
-  name: Build Verification
-- actions:
+- id: '4.5'
+  name: Documentation Verification
+  actions:
   - Verify all links
   - Check code examples
   - Test setup instructions
-  id: '4.5'
-  name: Documentation Verification
-- actions:
+- id: '4.6'
+  name: Report Generation
+  actions:
   - Calculate all metrics
   - Generate summary
   - List followups
   - Provide rollback instructions
   - Generate PR description
-  id: '4.6'
-  name: Report Generation
-timeout_minutes: 15
-
 ```
 
 ## Validation

@@ -4,18 +4,12 @@
 Add missing tests for critical paths
 
 ## Canonical Rules & Process
-- Focus on business logic and edge cases
-- Follow existing test conventions
-- Use AAA pattern: Arrange, Act, Assert
-- Mock external dependencies
-- Aim for determinism (no flaky tests)
+Follow canonical RUP directives for this workflow.
 
 ## Raw Protocol Data
 ```yaml
-coverage_targets:
-  e2e: Critical paths
-  integration: 60%
-  unit: 80%
+id: ws_tests
+priority: P0
 description: Add missing tests for critical paths
 guidelines:
 - Focus on business logic and edge cases
@@ -23,14 +17,15 @@ guidelines:
 - 'Use AAA pattern: Arrange, Act, Assert'
 - Mock external dependencies
 - Aim for determinism (no flaky tests)
-id: ws_tests
+coverage_targets:
+  unit: 80%
+  integration: 60%
+  e2e: Critical paths
 naming_conventions:
-  go: Test{Function}_{Scenario}
-  javascript: describe/it pattern
   python: test_{function}_{scenario}_{expected}
+  javascript: describe/it pattern
+  go: Test{Function}_{Scenario}
   rust: test_{function}_{scenario}
-priority: P0
-
 ```
 
 ## Validation

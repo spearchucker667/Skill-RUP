@@ -12,6 +12,20 @@ Fix identified bugs with regression tests
 
 ## Raw Protocol Data
 ```yaml
+id: ws_bugs
+priority: P0
+description: Fix identified bugs with regression tests
+process:
+- step: Select bug from backlog
+  details: Highest severity, lowest complexity
+- step: Write failing test
+  details: Test must reproduce the bug
+- step: Implement minimal fix
+  details: Prefer targeted over broad changes
+- step: Verify test passes
+  details: Run 3x to check for flakiness
+- step: Update documentation
+  details: Add to changelog, update affected docs
 bug_report_template: '## Bug: {title}
 
 
@@ -41,21 +55,6 @@ bug_report_template: '## Bug: {title}
   {test_name} in {test_file}
 
   '
-description: Fix identified bugs with regression tests
-id: ws_bugs
-priority: P0
-process:
-- details: Highest severity, lowest complexity
-  step: Select bug from backlog
-- details: Test must reproduce the bug
-  step: Write failing test
-- details: Prefer targeted over broad changes
-  step: Implement minimal fix
-- details: Run 3x to check for flakiness
-  step: Verify test passes
-- details: Add to changelog, update affected docs
-  step: Update documentation
-
 ```
 
 ## Validation

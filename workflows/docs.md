@@ -1,4 +1,4 @@
-# Docs Workflow
+# Documentation Workflow
 
 ## Purpose
 Improve documentation
@@ -8,24 +8,79 @@ Follow canonical RUP directives for this workflow.
 
 ## Raw Protocol Data
 ```yaml
-description: Improve documentation
 id: ws_docs
 priority: P1
+description: Improve documentation
 templates:
-  codeowners: '# CODEOWNERS
-
-    # Default owners
-
-    * @{default_team}
+  readme: '# {Project Name}
 
 
-    # Specific paths
+    {badges}
 
-    /src/ @{dev_team}
 
-    /docs/ @{docs_team}
+    {description}
 
-    /.github/ @{devops_team}
+
+    ## Features
+
+    - Feature 1
+
+    - Feature 2
+
+
+    ## Installation
+
+    ```bash
+
+    {install_command}
+
+    ```
+
+
+    ## Usage
+
+    ```{language}
+
+    {usage_example}
+
+    ```
+
+
+    ## Configuration
+
+    | Variable | Description | Default |
+
+    |----------|-------------|---------|
+
+    {config_table}
+
+
+    ## Development
+
+    ```bash
+
+    {dev_setup}
+
+    ```
+
+
+    ## Testing
+
+    ```bash
+
+    {test_command}
+
+    ```
+
+
+    ## Contributing
+
+    See [CONTRIBUTING.md](CONTRIBUTING.md)
+
+
+    ## License
+
+    {license}
 
     '
   contributing: '# Contributing
@@ -58,6 +113,22 @@ templates:
     - {standard_1}
 
     - {standard_2}
+
+    '
+  codeowners: '# CODEOWNERS
+
+    # Default owners
+
+    * @{default_team}
+
+
+    # Specific paths
+
+    /src/ @{dev_team}
+
+    /docs/ @{docs_team}
+
+    /.github/ @{devops_team}
 
     '
   issue_template_bug: '---
@@ -137,78 +208,6 @@ templates:
     - [ ] Conventional commit format
 
     '
-  readme: '# {Project Name}
-
-
-    {badges}
-
-
-    {description}
-
-
-    ## Features
-
-    - Feature 1
-
-    - Feature 2
-
-
-    ## Installation
-
-    ```bash
-
-    {install_command}
-
-    ```
-
-
-    ## Usage
-
-    ```{language}
-
-    {usage_example}
-
-    ```
-
-
-    ## Configuration
-
-    | Variable | Description | Default |
-
-    |----------|-------------|---------|
-
-    {config_table}
-
-
-    ## Development
-
-    ```bash
-
-    {dev_setup}
-
-    ```
-
-
-    ## Testing
-
-    ```bash
-
-    {test_command}
-
-    ```
-
-
-    ## Contributing
-
-    See [CONTRIBUTING.md](CONTRIBUTING.md)
-
-
-    ## License
-
-    {license}
-
-    '
-
 ```
 
 ## Validation
