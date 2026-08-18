@@ -147,25 +147,36 @@ class InventoryManager:
         """
         meta = {"contributors": 1, "last_commit": "N/A"}
 
-        git_dir = self.target_dir / ".git"
-        if not git_dir.exists():
-            return meta
-
         try:
+            # Only treat this as a repo if .git exists and the cwd is usable.
+            git_dir = self.target_dir / ".git"
+            if not git_dir.exists():
+                return meta
+
+            rc, stdout, _ = run_command(
+                ["git", "rev-parse", "--is-inside-work-tree"],
+                cwd=self.target_dir,
+            )
+            if rc != 0 or stdout.strip().lower() != "true":
+                return meta
+
             # Last commit
-            rc, stdout, _ = run_command(["git", "log", "-1", "--format=%cd (%h)", "--date=short"], cwd=self.target_dir)
+            rc, stdout, _ = run_command(
+                ["git", "log", "-1", "--format=%cd (%h)", "--date=short"],
+                cwd=self.target_dir,
+            )
             if rc == 0 and stdout.strip():
                 meta["last_commit"] = stdout.strip()
 
             # Contributor count
-            rc, stdout, _ = run_command(["git", "shortlog", "-sn", "HEAD"], cwd=self.target_dir)
+            rc, stdout, _ = run_command(
+                ["git", "shortlog", "-sn", "HEAD"],
+                cwd=self.target_dir,
+            )
             if rc == 0 and stdout.strip():
-                contributors = len(stdout.strip().splitlines())
-                meta["contributors"] = max(1, contributors)
+                meta["contributors"] = max(1, len(stdout.strip().splitlines()))
         except Exception as e:
-            # Keep inventory resilient for fixtures and non-repo targets.
             warnings.warn(f"Git metadata query failed: {e}", RuntimeWarning, stacklevel=2)
-            return meta
 
         return meta
 
