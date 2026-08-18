@@ -665,13 +665,35 @@ class VerificationPhase:
         }
 
     def _run_sast_scan(self) -> Dict[str, Any]:
-        linter = self._tools.get("linter")
-        build_tool = self._tools.get("build_tool")
+        """Run SAST based on the target's primary executable language ecosystem.
 
-        # Python: bandit
-        if self._python_module_available("bandit"):
+        Bandit is selected for Python projects; ESLint is selected for
+        JavaScript/TypeScript projects when a configuration or dependency exists.
+        Other ecosystems report ``not_applicable`` rather than defaulting to a
+        globally-installed tool.
+        """
+        primary = self._primary_language
+
+        if primary == "python":
+            if not self._python_module_available("bandit"):
+                return self._gate_not_run(
+                    "unavailable",
+                    "Bandit not available for Python SAST",
+                    tool="bandit",
+                )
             rc, stdout, _ = self._run_tool(
-                [sys.executable, "-m", "bandit", "-r", ".", "-f", "json", "-x", "tests,test,.venv,node_modules"], timeout=180
+                [
+                    sys.executable,
+                    "-m",
+                    "bandit",
+                    "-r",
+                    ".",
+                    "-f",
+                    "json",
+                    "-x",
+                    "tests,test,.venv,node_modules",
+                ],
+                timeout=180,
             )
             findings = 0
             try:
@@ -689,24 +711,38 @@ class VerificationPhase:
                 "tool": "bandit",
             }
 
-        # JS/TS: eslint if configured
-        pkg_json = self.target_dir / "package.json"
-        has_eslint_config = (
-            list(self.target_dir.glob("eslint.config.*"))
-            or list(self.target_dir.glob(".eslintrc*"))
-        )
-        has_eslint_in_deps = False
-        if pkg_json.exists():
-            try:
-                data = json.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
-                deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
-                has_eslint_in_deps = "eslint" in deps
-            except Exception as e:
-                warnings.warn(f"Could not parse package.json for eslint detection: {e}", RuntimeWarning, stacklevel=2)
+        if primary in ("javascript", "typescript"):
+            pkg_json = self.target_dir / "package.json"
+            has_eslint_config = (
+                list(self.target_dir.glob("eslint.config.*"))
+                or list(self.target_dir.glob(".eslintrc*"))
+            )
+            has_eslint_in_deps = False
+            if pkg_json.exists():
+                try:
+                    data = json.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
+                    deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
+                    has_eslint_in_deps = "eslint" in deps
+                except Exception as e:
+                    warnings.warn(
+                        f"Could not parse package.json for eslint detection: {e}",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
 
-        if linter == "eslint" or has_eslint_config or has_eslint_in_deps:
+            if not (has_eslint_config or has_eslint_in_deps):
+                return self._gate_not_run(
+                    "not_applicable",
+                    "No ESLint configuration or dependency detected for JS/TS project",
+                    tool="eslint",
+                )
+
             if not self._tool_available("npx"):
-                return self._gate_not_run("unavailable", "npx not available to run eslint", tool="eslint")
+                return self._gate_not_run(
+                    "unavailable",
+                    "npx not available to run eslint",
+                    tool="eslint",
+                )
             rc, stdout, _ = self._run_tool(["npx", "eslint", "."], timeout=180)
             findings = 0
             if rc != 0:
@@ -721,8 +757,8 @@ class VerificationPhase:
             }
 
         return self._gate_not_run(
-            "unavailable",
-            "No SAST tool available (Python: bandit; JS/TS: eslint)",
+            "not_applicable",
+            f"No SAST tool configured for primary ecosystem '{primary}'",
         )
 
     # ------------------------------------------------------------------

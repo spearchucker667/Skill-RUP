@@ -156,7 +156,10 @@ def _load_derived_schemas(schemas_dir: Path) -> Dict[str, Dict[str, Any]]:
         try:
             _check_file_size(schema_file)
             with open(schema_file, "r", encoding="utf-8") as f:
-                derived[schema_file.stem] = json.load(f)
+                # Key by the artifact name, e.g. "run-manifest" for
+                # "run-manifest.schema.json".
+                key = schema_file.name[: -len(".schema.json")]
+                derived[key] = json.load(f)
         except Exception as e:
             print(
                 f"{colorize('Warning:', Colors.YELLOW)} Could not load derived schema {schema_file}: {e}"

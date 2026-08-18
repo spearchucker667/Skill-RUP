@@ -168,12 +168,18 @@ class ArtifactBuilder:
 
     def _render_execution_report(self, data: Dict[str, Any]) -> str:
         changes = data.get("changes", [])
+        recommendations = data.get("recommendations", [])
         commits = data.get("commits", [])
 
         change_rows = []
         for c in changes:
             change_rows.append(f"| `{c.get('file_path')}` | {c.get('change_type', '').upper()} | {c.get('rationale')} | {c.get('backlog_item_id')} |")
         change_table = "\n".join(change_rows) if change_rows else "| None | - | No file changes recorded | - |"
+
+        rec_rows = []
+        for r in recommendations:
+            rec_rows.append(f"| {r.get('backlog_item_id')} | {r.get('subtype')} | {r.get('disposition')} | {r.get('rationale')} |")
+        rec_table = "\n".join(rec_rows) if rec_rows else "| None | - | - | No recommendations recorded |"
 
         commit_rows = []
         for cm in commits:
@@ -184,12 +190,18 @@ class ArtifactBuilder:
 
 ## Summary
 - **Total Changes**: {len(changes)}
+- **Total Recommendations**: {len(recommendations)}
 - **Commits Evaluated**: {len(commits)}
 
 ## Changes Made
 | File Path | Action | Rationale | Backlog Item ID |
 |-----------|--------|-----------|-----------------|
 {change_table}
+
+## Recommendations
+| Backlog Item ID | Subtype | Disposition | Rationale |
+|-----------------|---------|-------------|-----------|
+{rec_table}
 
 ## Commits
 | Commit Hash | Message | Breaking |

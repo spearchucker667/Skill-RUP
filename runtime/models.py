@@ -3,7 +3,7 @@ Data models and type definitions for RUP deterministic runtime.
 """
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Any, Optional
-import uuid
+import hashlib
 import datetime
 
 @dataclass
@@ -98,10 +98,19 @@ class RunManifest:
     verification_status: str = "pending"
 
     @staticmethod
-    def generate_run_id() -> str:
-        now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        short_id = uuid.uuid4().hex[:8]
-        return f"rup-{now_str}-{short_id}"
+    def generate_run_id(target_path: str = "") -> str:
+        """Generate a deterministic run ID from canonical constants and the target path.
+
+        The result is stable for the same target path, satisfying the deterministic
+        run-ID contract in SKILL.md.
+        """
+        canonical = (
+            f"{RunManifest.protocol_version}:"
+            f"{RunManifest.canonical_commit}:"
+            f"{target_path}"
+        )
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+        return f"rup-{digest}"
 
 @dataclass
 class SessionState:

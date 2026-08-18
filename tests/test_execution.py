@@ -30,7 +30,10 @@ def _init_git(repo_dir: Path) -> None:
 
 
 def _write_plan_and_discovery(
-    repo_dir: Path, backlog: list, selected_items: list
+    repo_dir: Path,
+    backlog: list,
+    selected_items: list,
+    constraints: dict | None = None,
 ) -> ExecutionPhase:
     paths = RupPaths(repo_dir)
     state = StateManager(paths)
@@ -40,6 +43,8 @@ def _write_plan_and_discovery(
         "execution_order": selected_items,
         "risk_analysis": {},
     }
+    if constraints is not None:
+        plan["constraints"] = constraints
     state.save_json(plan, "RUP_PLAN.json")
 
     discovery = {
@@ -272,3 +277,90 @@ def test_non_selected_backlog_item_does_not_produce_changes(tmp_path):
     assert not any(c["backlog_item_id"] == "DOCS-002" for c in data["changes"])
     assert not any(c["file_path"] == "CONTRIBUTING.md" for c in data["changes"])
     assert any(c["file_path"] == "README.md" for c in data["changes"])
+
+
+
+def test_max_files_limits_mutation(tmp_path):
+    """H-01: execution must stop producing concrete file changes once max-files is reached."""
+    repo = tmp_path / "maxfiles_mutation_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "DOCS-001",
+                "category": "docs",
+                "title": "Missing README",
+                "acceptance_criteria": [],
+                "risk": "low",
+            },
+            {
+                "id": "DOCS-002",
+                "category": "docs",
+                "title": "Missing CONTRIBUTING",
+                "acceptance_criteria": [],
+                "risk": "low",
+            },
+            {
+                "id": "GOV-002",
+                "category": "governance",
+                "title": "Missing Open Source License",
+                "acceptance_criteria": [],
+                "risk": "low",
+            },
+        ],
+        selected_items=["DOCS-001", "DOCS-002", "GOV-002"],
+        constraints={"max_files": 2, "risk_tolerance": "medium"},
+    )
+    data = phase.execute()
+
+    concrete = [c for c in data["changes"] if c.get("change_type") != "recommendation"]
+    file_paths = {c["file_path"] for c in concrete}
+    assert len(file_paths) <= 2
+    assert any(
+        "max-files limit" in c.get("rationale", "")
+        for c in data["changes"]
+        if c.get("change_type") == "recommendation"
+    )
+
+
+def test_risk_tolerance_skips_high_risk_dispatch(tmp_path):
+    """H-02: low risk tolerance must turn high-risk items into recommendations."""
+    repo = tmp_path / "risk_dispatch_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "SEC-001",
+                "category": "security",
+                "title": "Missing Security Policy",
+                "acceptance_criteria": [],
+                "risk": "high",
+            }
+        ],
+        selected_items=["SEC-001"],
+        constraints={"risk_tolerance": "low"},
+    )
+    data = phase.execute()
+
+    assert not any(c.get("file_path") == "SECURITY.md" for c in data["changes"])
+    assert any(
+        c.get("change_type") == "recommendation"
+        and "risk" in c.get("rationale", "").lower()
+        for c in data["changes"]
+    )

@@ -13,6 +13,7 @@ from .paths import RupPaths
 from .models import RunManifest, SessionState
 from .security import enforce_path_jail, safe_load_yaml, safe_load_json
 from .command_runner import run_command
+from .source_authority import CANONICAL_RUP_COMMIT, CANONICAL_PROTOCOL_VERSION
 
 
 # Mapping from canonical artifact filename to the phase that produces it.
@@ -47,7 +48,7 @@ def _compute_sha256(file_path: Path) -> str:
 class StateManager:
     def __init__(self, paths: RupPaths, run_id: Optional[str] = None):
         self.paths = paths
-        self.run_id = run_id or RunManifest.generate_run_id()
+        self.run_id = run_id or RunManifest.generate_run_id(str(paths.target_dir))
         self._session_state: Optional[SessionState] = None
         self._artifact_ledger: List[Dict[str, Any]] = []
 
