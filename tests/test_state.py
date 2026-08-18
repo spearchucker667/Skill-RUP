@@ -100,7 +100,7 @@ def test_generate_and_save_manifest_includes_artifacts_ledger(tmp_path):
     state.save_json({"hello": "world"}, "RUP_DISCOVERY.json")
 
     # Capture the ledger before the manifest is generated; the manifest itself
-    # is recorded afterward and must not appear in its own artifacts list.
+    # is also recorded in the ledger so the provenance is complete.
     ledger_before = list(state._artifact_ledger)
 
     manifest = state.generate_and_save_manifest(
@@ -112,8 +112,11 @@ def test_generate_and_save_manifest_includes_artifacts_ledger(tmp_path):
 
     assert manifest["run_id"] == state.run_id
     assert "artifacts" in manifest
-    assert manifest["artifacts"] == ledger_before
     assert any(a["name"] == "RUP_DISCOVERY.json" for a in manifest["artifacts"])
+    assert any(a["name"] == "run-manifest.json" for a in manifest["artifacts"])
+    # Every pre-existing ledger entry must be preserved.
+    pre_manifest = [a for a in manifest["artifacts"] if a["name"] != "run-manifest.json"]
+    assert pre_manifest == ledger_before
 
     # Verify the saved file matches the returned manifest.
     loaded = state.load_json("run-manifest.json")
@@ -234,7 +237,7 @@ def test_fresh_state_manager_recovers_ledger_from_disk(tmp_path):
     artifact_names = {a["name"] for a in manifest["artifacts"]}
     assert "RUP_DISCOVERY.json" in artifact_names
     assert "session-state.json" in artifact_names
-    assert "run-manifest.json" not in artifact_names
+    assert "run-manifest.json" in artifact_names
 
 
 def test_generate_and_save_manifest_rebuilds_full_ledger(tmp_path):
@@ -271,7 +274,7 @@ def test_generate_and_save_manifest_rebuilds_full_ledger(tmp_path):
     artifact_names = {a["name"] for a in manifest["artifacts"]}
     for name in lifecycle_artifacts:
         assert name in artifact_names, f"{name} missing from manifest artifacts"
-    assert "run-manifest.json" not in artifact_names
+    assert "run-manifest.json" in artifact_names
 
     loaded = state.load_json("run-manifest.json")
     assert loaded["artifacts"] == manifest["artifacts"]

@@ -205,9 +205,6 @@ class StateManager:
                 continue
             if path.name.startswith("."):
                 continue
-            if path.name == "run-manifest.json":
-                # The manifest records other artifacts, not itself.
-                continue
             if path.suffix not in (".json", ".md"):
                 continue
             if path.name in existing:
@@ -275,6 +272,30 @@ class StateManager:
             "verification_status": verification_status,
             "artifacts": list(self._artifact_ledger),
         }
+        # First save: the manifest payload without the self-reference entry.
+        self.save_json(manifest, "run-manifest.json")
+
+        # Compute the hash of the payload manifest (excluding self-reference) and
+        # append a self-reference entry so the ledger is complete.
+        manifest_path = self._get_artifact_path("run-manifest.json")
+        try:
+            manifest_sha256 = _compute_sha256(manifest_path)
+        except Exception as e:
+            warnings.warn(f"Could not hash run-manifest.json: {e}", RuntimeWarning, stacklevel=2)
+            manifest_sha256 = ""
+
+        manifest["artifacts"].append(
+            {
+                "name": "run-manifest.json",
+                "sha256": manifest_sha256,
+                "created_at": now_str,
+                "run_id": self.run_id,
+                "phase": "reporting",
+                "type": "json",
+                "relative_path": "run-manifest.json",
+            }
+        )
+        # Second save: manifest now includes its own ledger entry.
         self.save_json(manifest, "run-manifest.json")
         return manifest
 

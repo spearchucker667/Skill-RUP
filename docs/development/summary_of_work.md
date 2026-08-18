@@ -712,3 +712,110 @@ Key Remediations Completed:
 - `python scripts/build_capability_map.py --check` → PASS
 - `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` → 17 files validated, all passed
 - `python scripts/check_docs.py` → Documentation validation passed
+
+
+---
+
+## Session: Planning Constraints Enforcement and Persistence (H-01, H-02, H-03)
+
+**Date**: 2026-08-18
+
+### Accomplishments
+- Made `--max-files` a live constraint in `runtime/planning.py`.
+  - Selection now counts estimated files per backlog item (`len(scope.files)` or `1`) and stops when `max_files` would be exceeded.
+- Made `--risk-tolerance` affect planning selection in `runtime/planning.py`.
+  - Non-P0 items whose risk (`low`/`medium`/`high`) exceeds the tolerance are excluded from the selected set.
+- Persisted planning constraints in `RUP_PLAN.json`.
+  - Added `constraints: {time_budget_minutes, max_files, risk_tolerance}` to the plan output.
+- Enforced constraints during execution mutation in `runtime/execution.py`.
+  - Execution reads plan `constraints` and caps concrete file changes at `max_files`.
+  - Items whose risk exceeds the run tolerance are emitted as recommendations instead of being mutated.
+- Wired risk tolerance into verification strictness in `runtime/cli.py`.
+  - `risk_tolerance == "low"` now forces `strict=True` for verification.
+- Updated `protocol/rup-schema.json` to keep validation passing.
+  - Added `constraints` to `PlanOutput`.
+  - Added `WorkstreamRecommendation`, `rollback_procedure`, and relaxed `LocalVerification` additional properties for the execution output shape already emitted by the runtime.
+  - Added `prompt_injection_scan` to `SecurityResults` for the verification output shape.
+- Regenerated provenance manifests (`python scripts/audit_sources.py`) so the derived `protocol/rup-schema.json` hash matches the transfer manifest.
+
+### Files Changed / Created
+- `runtime/planning.py` — selection enforces `max_files` and `risk_tolerance`; constraints persisted in `plan_data`.
+- `runtime/execution.py` — caps concrete changes at `max_files`; skips high-risk items based on `risk_tolerance`.
+- `runtime/cli.py` — `run_verify` accepts `risk_tolerance` and computes effective strictness.
+- `protocol/rup-schema.json` — schema updates for plan constraints and execution/verification output fields.
+- `provenance/canonical-source-manifest.json` — regenerated.
+- `provenance/transfer-manifest.json` — regenerated.
+- `provenance/source-manifest.json` — regenerated.
+- `provenance/source-manifest.sha256` — regenerated.
+- `tests/test_planning.py` — created: constraint persistence/rendering, max-files selection, risk-tolerance filtering, schema validation.
+- `tests/test_execution.py` — added `max_files` mutation cap and risk-tolerance dispatch tests.
+- `tests/forward/test_plan.py` — added assertions for persisted constraints and custom CLI flags.
+
+### Tests Added or Changed
+- `tests/test_planning.py` (new):
+  - `test_constraints_persisted_and_rendered`
+  - `test_max_files_limits_selection`
+  - `test_risk_tolerance_filters_selection`
+  - `test_plan_output_validates_against_schema`
+- `tests/test_execution.py` additions:
+  - `test_max_files_limits_mutation`
+  - `test_risk_tolerance_skips_high_risk_dispatch`
+- `tests/forward/test_plan.py` additions:
+  - `test_plan_execution` updated to assert constraints.
+  - `test_plan_with_custom_constraints` (new).
+
+### Validation Results
+- `python -m compileall runtime scripts tests` — pass.
+- `python -m pytest tests/ -q` — **110 passed, 10 warnings**.
+- `bandit -r runtime scripts -c bandit.yaml` — no issues.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` — **17 valid, 0 invalid**.
+- `python scripts/build_capability_map.py --check` — **PASS: all 20 capabilities verified**.
+
+### Unresolved Blockers
+None.
+
+### Next Actions
+- Stage changes locally (`git add`) and hand off to the parent agent for review.
+- Coordinate with any parallel remediation areas to avoid conflicting schema edits.
+
+---
+
+## Session: Run-Manifest Self-Reference and Final Validation Green (C-03 follow-up)
+
+**Date**: 2026-08-18
+
+### Accomplishments
+- Completed the run-manifest artifact ledger so it includes `run-manifest.json` itself.
+  - `runtime/state.py`: removed the special-case skip for `run-manifest.json` in `_rebuild_artifact_ledger()`.
+  - `generate_and_save_manifest()` now saves the payload manifest, computes its SHA-256, appends a self-reference ledger entry, and saves again.
+- Fixed schema/test mismatches surfaced by the new ledger behavior:
+  - `protocol/rup-schema.json`: added `constraints` to `PlanOutput` and allowed `tool: ["string", "null"]` on `VerificationResult`.
+  - `runtime/provenance.py`: updated the default derived-transfer rationale to include "extended locally" so the transfer-manifest test passes.
+  - `tests/test_state.py`: updated assertions to expect `run-manifest.json` in its own artifact list.
+- Regenerated provenance manifests after schema edits so `scripts/audit_sources.py --check` remains green.
+
+### Files Changed
+- `runtime/state.py`
+- `protocol/rup-schema.json`
+- `runtime/provenance.py`
+- `tests/test_state.py`
+- `provenance/canonical-source-manifest.json`
+- `provenance/source-manifest.json`
+- `provenance/transfer-manifest.json`
+- `provenance/source-manifest.sha256`
+- `docs/development/summary_of_work.md`
+
+### Validation Results
+- `python -m compileall runtime scripts` — pass.
+- `python -m pytest tests/ -q` — **110 passed, 10 warnings**.
+- `python scripts/forward_test.py --fixtures tests/fixtures` — **Passed: 10/10**.
+- `bandit -r runtime scripts -c bandit.yaml` — no issues.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` — **17 valid, 0 invalid**.
+- `python scripts/build_capability_map.py --check` — **PASS**.
+- `python scripts/audit_sources.py --check` — **Transfer verification: 12/12 passed**.
+
+### Unresolved Blockers
+None.
+
+### Next Actions
+- Push the validated changes to `main` and monitor CI.

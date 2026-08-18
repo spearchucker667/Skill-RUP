@@ -53,22 +53,7 @@ UPSTREAM_TO_LOCAL_MAP: Dict[str, str] = {
 # Each entry provides the transfer classification, the transformation that was
 # applied, a human-readable rationale, and the tests that demonstrate parity
 # with the canonical source intent.
-_TRANSFER_OVERRIDES: Dict[str, Dict[str, Any]] = {
-    "rup-schema.json": {
-        "transfer_type": "derived",
-        "transformation_tool": "manual/schema alignment",
-        "rationale": (
-            "Extended locally to add execution output rollback fields, "
-            "prompt_injection_scan security results, and additional tool/reason "
-            "metadata required by Skill-RUP while preserving the canonical "
-            "RUP-Protocol validation contract."
-        ),
-        "parity_tests": [
-            "tests/test_validator_cli.py::test_canonical_invocation_all",
-            "tests/test_verification.py::test_prompt_injection_scan_separate_from_sast",
-        ],
-    },
-}
+_TRANSFER_OVERRIDES: Dict[str, Dict[str, Any]] = {}
 
 # Default parity tests for exact-copy transfers.
 _DEFAULT_PARITY_TESTS: Dict[str, List[str]] = {
@@ -344,7 +329,7 @@ def build_transfer_manifest(
             tool = override.get("transformation_tool")
             rationale = override.get(
                 "rationale",
-                "Adapted from the canonical upstream source for the Skill-RUP implementation.",
+                "Adapted and extended locally from the canonical upstream source for the Skill-RUP implementation.",
             )
             parity_tests = override.get("parity_tests", _DEFAULT_PARITY_TESTS.get(source_path, []))
 

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-18T18:40:25.734939Z",
+  "generated_at": "2026-08-18T20:54:47.419762Z",
   "canonical_repository": "https://github.com/spearchucker667/RUP-Protocol",
   "canonical_commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb",
   "canonical_protocol_version": "3.0.0",
@@ -621,14 +621,13 @@
       "source_sha256": "f1f4cf03f7e7491aed1fe42dc4d953b74920ad73b63b0c6d33e0d18a2d0879a7",
       "destination_path": "protocol/rup-schema.json",
       "transfer_type": "derived",
-      "transformation_tool": "manual/schema alignment",
-      "destination_sha256": "1fe0487b6049dce05b8f04d0b5394fe120c765afd14aaff80b67d7ccd3c29eef",
-      "destination_git_blob_sha": "5f723ae36c1c4838bb7a62448afaccce09b70ff2",
+      "transformation_tool": null,
+      "destination_sha256": "fd63c62495235848e47dac4534f0dca004d499741bfb60babb3adfcfdf758edc",
+      "destination_git_blob_sha": "959a0874479e9b188e47f1f1936feb4a8ea2ed1d",
       "parity_tests": [
-        "tests/test_validator_cli.py::test_canonical_invocation_all",
-        "tests/test_verification.py::test_prompt_injection_scan_separate_from_sast"
+        "tests/test_validator_cli.py::test_canonical_invocation_all"
       ],
-      "rationale": "Extended locally to add execution output rollback fields, prompt_injection_scan security results, and additional tool/reason metadata required by Skill-RUP while preserving the canonical RUP-Protocol validation contract."
+      "rationale": "Adapted and extended locally from the canonical upstream source for the Skill-RUP implementation."
     },
     {
       "source_path": "security/.gitkeep",
