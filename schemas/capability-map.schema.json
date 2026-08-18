@@ -2,5 +2,23 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spearchucker667.github.io/RUP/schemas/capability-map.schema.json",
   "title": "Capability-Map Schema",
-  "type": "object"
+  "type": "object",
+  "properties": {
+    "principles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "common_error_response": {
+      "$ref": "#/$defs/JsonSchemaDefinition"
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ToolDefinition"
+      }
+    }
+  },
+  "additionalProperties": false
 }

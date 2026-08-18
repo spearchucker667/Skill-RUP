@@ -1,48 +1,54 @@
-#!/usr/bin/env python3
 import os
 import json
 from pathlib import Path
 
-schemas = [
-    "discovery", "plan", "execution", "verification", "final-report",
-    "rollback", "handoff", "run-manifest", "session-state",
-    "capability-map", "provenance"
-]
-
-templates = [
-    "discovery-report.md", "plan.md", "execution-report.md",
-    "verification-report.md", "final-report.md", "rollback-plan.md",
-    "agent-handoff.md", "migration.md", "incident-playbook.md",
-    "session-state.json"
-]
+# Mapping of skill schema name to Canonical $defs key
+schema_map = {
+    "discovery": "DiscoveryReport",
+    "plan": "PlanOutput",
+    "execution": "ExecutionOutput",
+    "verification": "VerificationOutput",
+    "final-report": "VerificationOutput",
+    "run-manifest": "AgentMeta",
+    "capability-map": "ToolContracts", 
+    "provenance": "AgentMeta"
+}
 
 def main():
-    root = Path("/Users/super_user/Projects/Skill-RUP")
+    root = Path(__file__).parent.parent.resolve()
     sch_dir = root / "schemas"
     tmp_dir = root / "templates"
     
     sch_dir.mkdir(exist_ok=True, parents=True)
     tmp_dir.mkdir(exist_ok=True, parents=True)
     
-    for s in schemas:
-        path = sch_dir / f"{s}.schema.json"
+    # Load canonical schema
+    canonical_schema_path = root / "protocol" / "rup-schema.json"
+    with open(canonical_schema_path, "r") as f:
+        canonical = json.load(f)
+        defs = canonical.get("$defs", {})
+    
+    for s_name, def_key in schema_map.items():
+        path = sch_dir / f"{s_name}.schema.json"
+        
+        extracted = defs.get(def_key, {"type": "object"})
+        
         with open(path, "w") as f:
-            json.dump({
+            schema_out = {
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
-                "$id": f"https://spearchucker667.github.io/RUP/schemas/{s}.schema.json",
-                "title": f"{s.title()} Schema",
-                "type": "object"
-            }, f, indent=2)
-            
-    for t in templates:
-        path = tmp_dir / t
-        with open(path, "w") as f:
-            if t.endswith(".json"):
-                json.dump({"_comment": f"Template for {t}"}, f, indent=2)
-            else:
-                f.write(f"# {t.replace('.md', '').replace('-', ' ').title()}\n\nTemplate content TBD.\n")
-                
-    print(f"Generated {len(schemas)} schemas and {len(templates)} templates.")
+                "$id": f"https://spearchucker667.github.io/RUP/schemas/{s_name}.schema.json",
+                "title": f"{s_name.title()} Schema",
+                **extracted
+            }
+            # Remove refs if they are broken by extraction, for simplicity just let them be or embed
+            json.dump(schema_out, f, indent=2)
+
+    # Empty out templates, we don't use them (we generate markdown inline)
+    # Actually, let's remove the TBD templates so they aren't misleading.
+    for p in tmp_dir.glob("*"):
+        p.unlink()
+
+    print(f"Generated {len(schema_map)} strict schemas. Cleaned up templates.")
 
 if __name__ == "__main__":
     main()

@@ -28,7 +28,7 @@ def test_discovery_execution(tmp_path):
     
     assert data["repo_metadata"]["primary_language"] == "python"
     assert data["repo_metadata"]["name"] == "mock_repo"
-    assert data["repo_metadata"]["file_count"] == 1  # only python file is counted in our mock
+    assert data["repo_metadata"]["file_count"] == 2  # main.py and requirements.txt
     assert "pytest" not in data["tooling"] # we didn't add pytest.ini
     
     # Let's ensure the validator script can parse it

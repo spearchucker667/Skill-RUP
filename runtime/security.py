@@ -25,7 +25,9 @@ def enforce_path_jail(root: Path, target: Path) -> Path:
     """Ensure target path is within root, resolving symlinks safely."""
     resolved_root = root.resolve()
     resolved_target = target.resolve()
-    if not str(resolved_target).startswith(str(resolved_root)):
+    try:
+        resolved_target.relative_to(resolved_root)
+    except ValueError:
         raise PermissionError(f"Path traversal detected: {target} escapes {root}")
     return resolved_target
 

@@ -1,3 +1,0 @@
-# Plan
-
-Template content TBD.

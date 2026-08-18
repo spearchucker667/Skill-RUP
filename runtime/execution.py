@@ -14,32 +14,68 @@ class ExecutionPhase:
         self.artifact_builder = artifact_builder
 
     def execute(self) -> Dict[str, Any]:
-        """Run the execution phase based on plan state."""
+        """Run the execution phase by checking genuine git diffs."""
         plan_data = self.state_manager.load_json("RUP_PLAN.json")
         if not plan_data:
             raise RuntimeError("Missing RUP_PLAN.json. Must run plan first.")
             
-        # In a real environment, this would parse the planned items,
-        # apply specific transformations, and track diffs.
-        # For deterministic validation of the schema, we generate the trace.
+        changes = []
+        commits = []
         
+        # Detect uncommitted changes via git status
+        try:
+            status_output = run_command(["git", "status", "--porcelain"], cwd=self.target_dir)
+            for line in status_output.splitlines():
+                if not line.strip():
+                    continue
+                code = line[:2]
+                file_path = line[3:]
+                
+                change_type = "modify"
+                if "??" in code or "A" in code:
+                    change_type = "create"
+                elif "D" in code:
+                    change_type = "delete"
+                elif "R" in code:
+                    change_type = "rename"
+                    
+                changes.append({
+                    "file_path": file_path,
+                    "change_type": change_type,
+                    "rationale": "Detected uncommitted change",
+                    "backlog_item_id": plan_data.get("selected_items", [""])[0] if plan_data.get("selected_items") else "UNKNOWN"
+                })
+        except Exception:
+            pass # Git might not be initialized
+            
+        # Extract recent commits (last 5)
+        try:
+            log_output = run_command(["git", "log", "-n", "5", "--oneline"], cwd=self.target_dir)
+            for line in log_output.splitlines():
+                if not line.strip():
+                    continue
+                parts = line.split(" ", 1)
+                commits.append({
+                    "hash": parts[0],
+                    "message": parts[1] if len(parts) > 1 else "",
+                    "files": [],
+                    "type": "commit",
+                    "breaking": "BREAKING CHANGE" in line,
+                    "backlog_item_ids": []
+                })
+        except Exception:
+            pass
+            
         execution_data = {
-            "changes": [
-                {
-                    "file_path": "tests/test_main.py",
-                    "change_type": "create"
-                }
-            ],
-            "commits": [
-                {
-                    "message": "test: add unit tests for main module",
-                    "files": ["tests/test_main.py"]
-                }
-            ],
+            "changes": changes,
+            "commits": commits,
             "local_verification": {
-                "tests": {"executed": True, "passed": True},
-                "lint": {"executed": True, "passed": True}
-            }
+                "tests": {"executed": False, "passed": False},
+                "lint": {"executed": False, "passed": False},
+                "build": {"executed": False, "passed": False},
+                "type_check": {"executed": False, "passed": False}
+            },
+            "artifacts": []
         }
 
         # Save machine-readable state

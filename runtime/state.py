@@ -16,10 +16,20 @@ class StateManager:
         return self.paths.get_target_path(filename)
         
     def save_json(self, data: Dict[str, Any], filename: str) -> None:
-        """Save state to a JSON file securely."""
+        """Save state to a JSON file securely using atomic replacement."""
+        import os
+        import tempfile
         out_path = self._get_artifact_path(filename)
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        fd, temp_path = tempfile.mkstemp(dir=out_path.parent, prefix=".", suffix=".tmp")
+        try:
+            with open(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            os.replace(temp_path, out_path)
+        except Exception:
+            os.unlink(temp_path)
+            raise
             
     def load_json(self, filename: str) -> Dict[str, Any]:
         """Load state from a JSON file safely."""

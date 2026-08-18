@@ -5,7 +5,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/1_discovery.md"
+      "workflows/1_discovery.md",
+      "runtime/1_discovery.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -16,7 +17,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/1_discovery.md"
+      "workflows/1_discovery.md",
+      "runtime/1_discovery.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -27,7 +29,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/1_discovery.md"
+      "workflows/1_discovery.md",
+      "runtime/1_discovery.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -38,7 +41,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/1_discovery.md"
+      "workflows/1_discovery.md",
+      "runtime/1_discovery.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -49,7 +53,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/1_discovery.md"
+      "workflows/1_discovery.md",
+      "runtime/1_discovery.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -60,7 +65,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/1_discovery.md"
+      "workflows/1_discovery.md",
+      "runtime/1_discovery.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -71,7 +77,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/1_discovery.md"
+      "workflows/1_discovery.md",
+      "runtime/1_discovery.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -82,7 +89,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/2_planning.md"
+      "workflows/2_planning.md",
+      "runtime/2_planning.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -93,7 +101,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/2_planning.md"
+      "workflows/2_planning.md",
+      "runtime/2_planning.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -104,7 +113,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/2_planning.md"
+      "workflows/2_planning.md",
+      "runtime/2_planning.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -115,7 +125,96 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/2_planning.md"
+      "workflows/2_planning.md",
+      "runtime/2_planning.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.phases.phase_3_execution.workstreams.bug_fixes",
+    "category": "workflow",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "workflows/bug_fixes.md"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.phases.phase_3_execution.workstreams.tests",
+    "category": "workflow",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "workflows/tests.md"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.phases.phase_3_execution.workstreams.ci_cd",
+    "category": "workflow",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "workflows/ci_cd.md"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.phases.phase_3_execution.workstreams.security",
+    "category": "workflow",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "workflows/security.md"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.phases.phase_3_execution.workstreams.documentation",
+    "category": "workflow",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "workflows/documentation.md"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.phases.phase_3_execution.workstreams.governance",
+    "category": "workflow",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "workflows/governance.md"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.phases.phase_3_execution.workstreams.containerization",
+    "category": "workflow",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "workflows/containerization.md"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.phases.phase_3_execution.workstreams.observability",
+    "category": "workflow",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "workflows/observability.md"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -126,7 +225,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/4_verification.md"
+      "workflows/4_verification.md",
+      "runtime/4_verification.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -137,7 +237,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/4_verification.md"
+      "workflows/4_verification.md",
+      "runtime/4_verification.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -148,7 +249,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/4_verification.md"
+      "workflows/4_verification.md",
+      "runtime/4_verification.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -159,7 +261,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/4_verification.md"
+      "workflows/4_verification.md",
+      "runtime/4_verification.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -170,7 +273,8 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/4_verification.md"
+      "workflows/4_verification.md",
+      "runtime/4_verification.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
@@ -181,18 +285,912 @@
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
-      "workflows/4_verification.md"
+      "workflows/4_verification.md",
+      "runtime/4_verification.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"
   },
   {
-    "id": "rup.tool_contracts",
+    "id": "rup.guardrails.adversarial_defense.input_sanitization",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.guardrails.adversarial_defense.sandboxing",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.guardrails.hard_rules.immutable",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.guardrails.hard_rules.breaking_changes",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.guardrails.hard_rules.change_scope",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.guardrails.hard_rules.verification",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.guardrails.soft_rules.preferences",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.guardrails.soft_rules.guidelines",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.guardrails.scope_control.boundaries",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.guardrails.scope_control.escalation",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.guardrails.question_policy.principle",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.guardrails.question_policy.strategy",
+    "category": "guardrail",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/security.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.tools.filesystem_read",
     "category": "tool_contracts",
     "mandatory": true,
     "port_status": "ported",
     "implementation": [
       "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.tools.git_log_analyzer",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.tools.dependency_parser",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.tools.static_analyzer",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.tools.test_framework_detector",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.tools.ci_workflow_parser",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.tools.monorepo_detector",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.tools.license_detector",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.error_modes.REPO_NOT_FOUND",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/discovery.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.error_modes.PERMISSION_DENIED",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/discovery.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.error_modes.AMBIGUOUS_LANGUAGE",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/discovery.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.error_modes.NO_PACKAGE_MANAGER",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/discovery.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.discovery_agent.error_modes.CORRUPT_GIT_HISTORY",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/discovery.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.planning_agent.tools.priority_scorer",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.planning_agent.tools.risk_calculator",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.planning_agent.tools.dependency_resolver",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.planning_agent.tools.effort_estimator",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.planning_agent.error_modes.EMPTY_BACKLOG",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/planning.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.planning_agent.error_modes.CIRCULAR_DEPENDENCY",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/planning.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.planning_agent.error_modes.EXCEEDS_CONSTRAINTS",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/planning.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.tools.code_editor",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.tools.test_runner",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.tools.linter",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.tools.formatter",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.tools.type_checker",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.tools.git_operations",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.tools.file_system",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.error_modes.TEST_FAILURE",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.error_modes.LINT_FAILURE",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.error_modes.HALLUCINATED_DEPENDENCY",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.error_modes.BUILD_FAILURE",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.error_modes.CANNOT_EXECUTE",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.execution_agent.error_modes.MERGE_CONFLICT",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.verification_agent.tools.test_runner",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.verification_agent.tools.linter",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.verification_agent.tools.security_scanner",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.verification_agent.tools.coverage_analyzer",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.verification_agent.tools.git_diff_analyzer",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.verification_agent.tools.report_generator",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.verification_agent.tools.pr_generator",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/tool_detection.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.verification_agent.error_modes.VERIFICATION_TIMEOUT",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/verification.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.verification_agent.error_modes.CRITICAL_FAILURE",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/verification.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.agents.verification_agent.error_modes.FLAKY_TESTS_DETECTED",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/verification.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.priorities.P0_critical",
+    "category": "priorities",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.priorities.P1_high",
+    "category": "priorities",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.priorities.P2_medium",
+    "category": "priorities",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.priorities.P3_optional",
+    "category": "priorities",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.change_management.breaking_changes",
+    "category": "change_management",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.change_management.rollback",
+    "category": "change_management",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.change_management.hotfix",
+    "category": "change_management",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.error_handling.principles",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.error_handling.strategies",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.error_handling.recovery",
+    "category": "error_handling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.monorepo.detection",
+    "category": "monorepo",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.monorepo.strategies",
+    "category": "monorepo",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.monorepo.package_schema",
+    "category": "monorepo",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.scaling.tiers",
+    "category": "scaling",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.verification_commands.detection",
+    "category": "verification_commands",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.verification_commands.languages",
+    "category": "verification_commands",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.advanced_features.mutation_testing",
+    "category": "advanced_features",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.advanced_features.property_based_testing",
+    "category": "advanced_features",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.advanced_features.chaos_engineering",
+    "category": "advanced_features",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.advanced_features.incident_response",
+    "category": "advanced_features",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.advanced_features.technical_debt",
+    "category": "advanced_features",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.tool_contracts.principles",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
+    ],
+    "translation_type": "agent-native",
+    "semantic_equivalence": "preserved"
+  },
+  {
+    "id": "rup.tool_contracts.tools",
+    "category": "tool_contracts",
+    "mandatory": true,
+    "port_status": "ported",
+    "implementation": [
+      "runtime/execution.py",
+      "runtime/verification.py",
+      "runtime/models.py"
     ],
     "translation_type": "agent-native",
     "semantic_equivalence": "preserved"

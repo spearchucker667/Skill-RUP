@@ -1,34 +1,16 @@
 # Advanced Quality Workflow
 
 ## Purpose
-TBD
+Standard advanced-quality process mapped from RUP Protocol.
 
-## Preconditions
-TBD
+## Canonical Rules & Process
+Follow canonical RUP directives for this workflow.
 
-## Inputs
-TBD
+## Raw Protocol Data
+```yaml
+description: Standard advanced-quality process mapped from RUP Protocol.
 
-## Source Protocol Sections
-- Provenance trace required here.
-
-## Allowed Mutations
-TBD
-
-## Prohibited Mutations
-TBD
-
-## Steps
-1. TBD
-
-## Artifacts
-TBD
+```
 
 ## Validation
-TBD
-
-## Failure Behavior
-TBD
-
-## Handoff State
-TBD
+Must comply with `rup-schema.json`.

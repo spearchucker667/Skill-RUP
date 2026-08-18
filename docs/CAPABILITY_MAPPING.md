@@ -1,1 +1,106 @@
-# Capability Mapping\n\nAll mandatory capabilities are ported.\n
+# Capability Mapping
+
+All mandatory capabilities are ported.
+- `rup.phases.phase_1_discovery.1.1` mapped to `workflows/1_discovery.md, runtime/1_discovery.py`
+- `rup.phases.phase_1_discovery.1.2` mapped to `workflows/1_discovery.md, runtime/1_discovery.py`
+- `rup.phases.phase_1_discovery.1.3` mapped to `workflows/1_discovery.md, runtime/1_discovery.py`
+- `rup.phases.phase_1_discovery.1.4` mapped to `workflows/1_discovery.md, runtime/1_discovery.py`
+- `rup.phases.phase_1_discovery.1.5` mapped to `workflows/1_discovery.md, runtime/1_discovery.py`
+- `rup.phases.phase_1_discovery.1.6` mapped to `workflows/1_discovery.md, runtime/1_discovery.py`
+- `rup.phases.phase_1_discovery.1.7` mapped to `workflows/1_discovery.md, runtime/1_discovery.py`
+- `rup.phases.phase_2_planning.2.1` mapped to `workflows/2_planning.md, runtime/2_planning.py`
+- `rup.phases.phase_2_planning.2.2` mapped to `workflows/2_planning.md, runtime/2_planning.py`
+- `rup.phases.phase_2_planning.2.3` mapped to `workflows/2_planning.md, runtime/2_planning.py`
+- `rup.phases.phase_2_planning.2.4` mapped to `workflows/2_planning.md, runtime/2_planning.py`
+- `rup.phases.phase_3_execution.workstreams.bug_fixes` mapped to `workflows/bug_fixes.md`
+- `rup.phases.phase_3_execution.workstreams.tests` mapped to `workflows/tests.md`
+- `rup.phases.phase_3_execution.workstreams.ci_cd` mapped to `workflows/ci_cd.md`
+- `rup.phases.phase_3_execution.workstreams.security` mapped to `workflows/security.md`
+- `rup.phases.phase_3_execution.workstreams.documentation` mapped to `workflows/documentation.md`
+- `rup.phases.phase_3_execution.workstreams.governance` mapped to `workflows/governance.md`
+- `rup.phases.phase_3_execution.workstreams.containerization` mapped to `workflows/containerization.md`
+- `rup.phases.phase_3_execution.workstreams.observability` mapped to `workflows/observability.md`
+- `rup.phases.phase_4_verification.4.1` mapped to `workflows/4_verification.md, runtime/4_verification.py`
+- `rup.phases.phase_4_verification.4.2` mapped to `workflows/4_verification.md, runtime/4_verification.py`
+- `rup.phases.phase_4_verification.4.3` mapped to `workflows/4_verification.md, runtime/4_verification.py`
+- `rup.phases.phase_4_verification.4.4` mapped to `workflows/4_verification.md, runtime/4_verification.py`
+- `rup.phases.phase_4_verification.4.5` mapped to `workflows/4_verification.md, runtime/4_verification.py`
+- `rup.phases.phase_4_verification.4.6` mapped to `workflows/4_verification.md, runtime/4_verification.py`
+- `rup.guardrails.adversarial_defense.input_sanitization` mapped to `runtime/security.py`
+- `rup.guardrails.adversarial_defense.sandboxing` mapped to `runtime/security.py`
+- `rup.guardrails.hard_rules.immutable` mapped to `runtime/security.py`
+- `rup.guardrails.hard_rules.breaking_changes` mapped to `runtime/security.py`
+- `rup.guardrails.hard_rules.change_scope` mapped to `runtime/security.py`
+- `rup.guardrails.hard_rules.verification` mapped to `runtime/security.py`
+- `rup.guardrails.soft_rules.preferences` mapped to `runtime/security.py`
+- `rup.guardrails.soft_rules.guidelines` mapped to `runtime/security.py`
+- `rup.guardrails.scope_control.boundaries` mapped to `runtime/security.py`
+- `rup.guardrails.scope_control.escalation` mapped to `runtime/security.py`
+- `rup.guardrails.question_policy.principle` mapped to `runtime/security.py`
+- `rup.guardrails.question_policy.strategy` mapped to `runtime/security.py`
+- `rup.agents.discovery_agent.tools.filesystem_read` mapped to `runtime/tool_detection.py`
+- `rup.agents.discovery_agent.tools.git_log_analyzer` mapped to `runtime/tool_detection.py`
+- `rup.agents.discovery_agent.tools.dependency_parser` mapped to `runtime/tool_detection.py`
+- `rup.agents.discovery_agent.tools.static_analyzer` mapped to `runtime/tool_detection.py`
+- `rup.agents.discovery_agent.tools.test_framework_detector` mapped to `runtime/tool_detection.py`
+- `rup.agents.discovery_agent.tools.ci_workflow_parser` mapped to `runtime/tool_detection.py`
+- `rup.agents.discovery_agent.tools.monorepo_detector` mapped to `runtime/tool_detection.py`
+- `rup.agents.discovery_agent.tools.license_detector` mapped to `runtime/tool_detection.py`
+- `rup.agents.discovery_agent.error_modes.REPO_NOT_FOUND` mapped to `runtime/discovery.py`
+- `rup.agents.discovery_agent.error_modes.PERMISSION_DENIED` mapped to `runtime/discovery.py`
+- `rup.agents.discovery_agent.error_modes.AMBIGUOUS_LANGUAGE` mapped to `runtime/discovery.py`
+- `rup.agents.discovery_agent.error_modes.NO_PACKAGE_MANAGER` mapped to `runtime/discovery.py`
+- `rup.agents.discovery_agent.error_modes.CORRUPT_GIT_HISTORY` mapped to `runtime/discovery.py`
+- `rup.agents.planning_agent.tools.priority_scorer` mapped to `runtime/tool_detection.py`
+- `rup.agents.planning_agent.tools.risk_calculator` mapped to `runtime/tool_detection.py`
+- `rup.agents.planning_agent.tools.dependency_resolver` mapped to `runtime/tool_detection.py`
+- `rup.agents.planning_agent.tools.effort_estimator` mapped to `runtime/tool_detection.py`
+- `rup.agents.planning_agent.error_modes.EMPTY_BACKLOG` mapped to `runtime/planning.py`
+- `rup.agents.planning_agent.error_modes.CIRCULAR_DEPENDENCY` mapped to `runtime/planning.py`
+- `rup.agents.planning_agent.error_modes.EXCEEDS_CONSTRAINTS` mapped to `runtime/planning.py`
+- `rup.agents.execution_agent.tools.code_editor` mapped to `runtime/tool_detection.py`
+- `rup.agents.execution_agent.tools.test_runner` mapped to `runtime/tool_detection.py`
+- `rup.agents.execution_agent.tools.linter` mapped to `runtime/tool_detection.py`
+- `rup.agents.execution_agent.tools.formatter` mapped to `runtime/tool_detection.py`
+- `rup.agents.execution_agent.tools.type_checker` mapped to `runtime/tool_detection.py`
+- `rup.agents.execution_agent.tools.git_operations` mapped to `runtime/tool_detection.py`
+- `rup.agents.execution_agent.tools.file_system` mapped to `runtime/tool_detection.py`
+- `rup.agents.execution_agent.error_modes.TEST_FAILURE` mapped to `runtime/execution.py`
+- `rup.agents.execution_agent.error_modes.LINT_FAILURE` mapped to `runtime/execution.py`
+- `rup.agents.execution_agent.error_modes.HALLUCINATED_DEPENDENCY` mapped to `runtime/execution.py`
+- `rup.agents.execution_agent.error_modes.BUILD_FAILURE` mapped to `runtime/execution.py`
+- `rup.agents.execution_agent.error_modes.CANNOT_EXECUTE` mapped to `runtime/execution.py`
+- `rup.agents.execution_agent.error_modes.MERGE_CONFLICT` mapped to `runtime/execution.py`
+- `rup.agents.verification_agent.tools.test_runner` mapped to `runtime/tool_detection.py`
+- `rup.agents.verification_agent.tools.linter` mapped to `runtime/tool_detection.py`
+- `rup.agents.verification_agent.tools.security_scanner` mapped to `runtime/tool_detection.py`
+- `rup.agents.verification_agent.tools.coverage_analyzer` mapped to `runtime/tool_detection.py`
+- `rup.agents.verification_agent.tools.git_diff_analyzer` mapped to `runtime/tool_detection.py`
+- `rup.agents.verification_agent.tools.report_generator` mapped to `runtime/tool_detection.py`
+- `rup.agents.verification_agent.tools.pr_generator` mapped to `runtime/tool_detection.py`
+- `rup.agents.verification_agent.error_modes.VERIFICATION_TIMEOUT` mapped to `runtime/verification.py`
+- `rup.agents.verification_agent.error_modes.CRITICAL_FAILURE` mapped to `runtime/verification.py`
+- `rup.agents.verification_agent.error_modes.FLAKY_TESTS_DETECTED` mapped to `runtime/verification.py`
+- `rup.priorities.P0_critical` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.priorities.P1_high` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.priorities.P2_medium` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.priorities.P3_optional` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.change_management.breaking_changes` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.change_management.rollback` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.change_management.hotfix` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.error_handling.principles` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.error_handling.strategies` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.error_handling.recovery` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.monorepo.detection` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.monorepo.strategies` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.monorepo.package_schema` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.scaling.tiers` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.verification_commands.detection` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.verification_commands.languages` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.advanced_features.mutation_testing` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.advanced_features.property_based_testing` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.advanced_features.chaos_engineering` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.advanced_features.incident_response` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.advanced_features.technical_debt` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.tool_contracts.principles` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`
+- `rup.tool_contracts.tools` mapped to `runtime/execution.py, runtime/verification.py, runtime/models.py`

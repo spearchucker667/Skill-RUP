@@ -20,13 +20,30 @@ class PlanningPhase:
             
         gaps = discovery_data.get("gaps", [])
         
-        # Simple backlog generation based on gaps
+        # Simple backlog generation based on genuine gaps
         backlog = []
+        total_effort = 0
         for i, gap in enumerate(gaps):
+            priority = "P0" if gap.get("severity") in ("high", "critical") else "P1"
+            effort_str = gap.get("effort_estimate", "medium")
+            mins = 15 if effort_str == "small" else 30 if effort_str == "medium" else 60
+            total_effort += mins
+            
             backlog.append({
-                "id": f"ITEM-00{i+1}",
-                "priority": "P0" if gap.get("severity") == "high" else "P1",
-                "title": gap.get("title", "Address gap")
+                "id": gap.get("id", f"ITEM-{i}"),
+                "priority": priority,
+                "category": gap.get("category", "general"),
+                "title": gap.get("title", "Address gap"),
+                "description": gap.get("description", ""),
+                "scope": {
+                    "files": gap.get("files_affected", []),
+                    "packages": []
+                },
+                "risk": "low" if priority != "P0" else "medium",
+                "estimated_effort_minutes": mins,
+                "verification_method": "Automated pipeline",
+                "dependencies": [],
+                "acceptance_criteria": ["Gap is resolved"]
             })
             
         # Select all items for execution
@@ -36,9 +53,16 @@ class PlanningPhase:
             "backlog": backlog,
             "selected_items": selected_items,
             "execution_order": selected_items,
+            "risk_analysis": {
+                "breaking_changes_possible": False,
+                "requires_manual_review": False,
+                "rollback_complexity": "trivial",
+                "affected_packages": []
+            },
             "estimated_effort": {
-                "total_minutes": len(selected_items) * 30,
-                "confidence": "medium"
+                "total_minutes": total_effort,
+                "confidence": "high",
+                "breakdown": { item["id"]: item["estimated_effort_minutes"] for item in backlog }
             }
         }
 

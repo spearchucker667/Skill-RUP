@@ -1,40 +1,26 @@
-# RUP Protocol Examples
+# Skill-RUP
 
-This folder contains example **agent output artifacts** that conform to the `rup-schema.json` definitions.
+**Skill-RUP** is a production-grade, agent-native implementation of the [RUP Protocol v3.0.0](https://github.com/spearchucker667/RUP-Protocol).
 
-## Files
+It transforms the machine-readable RUP specification into an executable, portable skill that can be run deterministically.
 
-* `discovery_output.json`
-  * Intended to match `#/$defs/DiscoveryReport`
-  * Summarizes repo metadata, detected tooling, gaps, and risk scores
+## Architecture
 
-* `plan_output.json`
-  * Intended to match `#/$defs/PlanOutput`
-  * Contains a prioritized backlog and selected items for the run
+- **`SKILL.md`**: The primary entry point for agent workflows.
+- **`runtime/`**: The deterministic Python implementation for calculating line counts, generating execution state, parsing diffs, running tests, and managing phases.
+- **`workflows/`**: Phase and workstream guidelines extracted automatically from the canonical `rup-protocol.yaml`.
+- **`schemas/`**: Strict JSON schemas extracted directly from the canonical `rup-schema.json`.
+- **`protocol/`**: The authoritative RUP v3 protocol sources.
 
-* `execution_output.json`
-  * Intended to match `#/$defs/ExecutionOutput`
-  * Contains file changes, proposed commits, and local verification outcomes
+## Phases
 
-* `verification_output.json`
-  * Intended to match `#/$defs/VerificationOutput`
-  * Contains verification results, metrics deltas, audit trail, and PR recommendations
+Skill-RUP handles the standard lifecycle:
+1. **Discovery**: Runs `runtime.cli discovery` to detect codebase state and identify genuine gaps.
+2. **Plan**: Runs `runtime.cli plan` to translate gaps into a prioritized backlog.
+3. **Execute**: Runs `runtime.cli execute` to verify real uncommitted changes.
+4. **Verify**: Runs `runtime.cli verify` to execute actual tests and evaluate readiness.
+5. **Report**: Runs `runtime.cli report` to emit the final `RUP_FINAL_REPORT.md`.
 
-## Validate examples
+## Documentation
 
-### Python
-
-```bash
-cd ~/path/to/RUP-Protocol
-python validators/validate_rup.py output examples/discovery_output.json discovery
-python validators/validate_rup.py output examples/plan_output.json plan
-python validators/validate_rup.py output examples/execution_output.json execution
-python validators/validate_rup.py output examples/verification_output.json verification
-```
-
-### Node
-
-```bash
-cd ~/path/to/RUP-Protocol
-node validators/validate_rup.js all ./examples
-```
+See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for how to use this skill, and [docs/INSTALL.md](docs/INSTALL.md) for setup instructions.

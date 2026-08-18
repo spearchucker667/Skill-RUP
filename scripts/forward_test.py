@@ -2,10 +2,30 @@
 import argparse
 import sys
 
+import argparse
+import sys
+import subprocess
+from pathlib import Path
+
 def run_forward_test(fixtures_dir: str) -> int:
-    print(f"Running forward tests on fixtures in {fixtures_dir}...")
-    # TBD: Actually run the agent logic when it is fully implemented
-    print("Forward tests framework initialized. Tests PASS in stub mode.")
+    target = Path(fixtures_dir).resolve()
+    print(f"Running forward tests on fixtures in {target}...")
+    
+    cli_dir = Path(__file__).parent.parent
+    
+    phases = ["discovery", "plan", "execute", "verify", "report"]
+    
+    for phase in phases:
+        print(f"--- Running {phase.upper()} ---")
+        cmd = [sys.executable, "-m", "runtime.cli", phase, "--target", str(target)]
+        res = subprocess.run(cmd, cwd=cli_dir, capture_output=True, text=True)
+        if res.returncode != 0:
+            print(f"FAILED in phase {phase}:")
+            print(res.stderr)
+            return 1
+        print(res.stdout)
+        
+    print("Forward tests PASS: All phases executed successfully.")
     return 0
 
 def main():

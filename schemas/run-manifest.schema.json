@@ -2,5 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spearchucker667.github.io/RUP/schemas/run-manifest.schema.json",
   "title": "Run-Manifest Schema",
-  "type": "object"
+  "type": "object",
+  "description": "Optional metadata header for agent outputs (useful for audit trails and timing).",
+  "properties": {
+    "agent_id": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "partial",
+        "failure"
+      ]
+    }
+  },
+  "additionalProperties": false
 }

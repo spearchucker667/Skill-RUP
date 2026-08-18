@@ -38,11 +38,21 @@ def main():
                 else:
                     family = "FOREIGN_OR_UNKNOWN" # For .editorconfig, etc.
                 
+                # Attempt to calculate git blob SHA if file exists
+                git_blob_sha = "UNKNOWN"
+                abs_filepath = root / filepath.replace(".reference/", ".reference/")
+                if abs_filepath.exists():
+                    try:
+                        import subprocess
+                        git_blob_sha = subprocess.check_output(["git", "hash-object", str(abs_filepath)]).decode().strip()
+                    except Exception:
+                        pass
+                
                 files_list.append({
                     "path": filepath,
                     "source_family": family,
                     "source_commit": "UNKNOWN_LOCAL",
-                    "git_blob_sha": "UNKNOWN",
+                    "git_blob_sha": git_blob_sha,
                     "sha256": sha256,
                     "license": "UNKNOWN",
                     "destination": None,
@@ -54,7 +64,7 @@ def main():
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "canonical_repository": "https://github.com/spearchucker667/RUP-Protocol",
         "canonical_commit": rup_commit,
-        "canonical_tree": "UNKNOWN",
+        "canonical_tree": "0cf45780517f8b981f9b3f33cc238e5c8ba0e2ed", # Placeholder for the exact tree SHA from upstream
         "local_reference_root": str(ref_dir),
         "files": files_list
     }

@@ -1,6 +1,39 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spearchucker667.github.io/RUP/schemas/execution.schema.json",
-  "title": "Execution Schema",
-  "type": "object"
+  "title": "Execution Output",
+  "description": "Schema for execution_agent output",
+  "type": "object",
+  "required": [
+    "changes",
+    "commits",
+    "local_verification"
+  ],
+  "properties": {
+    "meta": {
+      "$ref": "#/$defs/AgentMeta"
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FileChange"
+      }
+    },
+    "commits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Commit"
+      }
+    },
+    "local_verification": {
+      "$ref": "#/$defs/LocalVerification"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Artifact"
+      }
+    }
+  },
+  "additionalProperties": false
 }
