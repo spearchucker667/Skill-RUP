@@ -12,6 +12,7 @@ import pytest
 
 from runtime.paths import RupPaths
 from runtime.state import StateManager
+from runtime.artifact_builder import ArtifactBuilder
 
 
 def test_load_json_does_not_fall_back_to_target_root(tmp_path):
@@ -141,3 +142,115 @@ def test_state_trust_boundary(tmp_path):
     assert (tmp_path / ".rup" / "RUP_DISCOVERY.json").exists()
     assert (tmp_path / ".rup" / "session-state.json").exists()
     assert state.load_json("RUP_DISCOVERY.json") == {"phase": "discovery"}
+
+
+def test_artifact_builder_records_markdown_in_ledger(tmp_path):
+    """ArtifactBuilder must record Markdown artifacts in the state ledger."""
+    paths = RupPaths(tmp_path)
+    state = StateManager(paths)
+    builder = ArtifactBuilder(paths, state=state)
+
+    builder.build_markdown(
+        "discovery-report.md", {"repo_metadata": {"name": "test"}}, "RUP_DISCOVERY.md"
+    )
+
+    assert (tmp_path / ".rup" / "RUP_DISCOVERY.md").exists()
+    entry = next(
+        (e for e in state._artifact_ledger if e["name"] == "RUP_DISCOVERY.md"), None
+    )
+    assert entry is not None
+    assert entry["type"] == "markdown"
+    assert entry["phase"] == "discovery"
+    assert entry["sha256"]
+    assert entry["run_id"] == state.run_id
+    assert entry["relative_path"] == "RUP_DISCOVERY.md"
+    assert "created_at" in entry
+
+
+def test_rebuild_artifact_ledger_includes_files_on_disk(tmp_path):
+    """_rebuild_artifact_ledger must record artifacts that were never explicitly tracked."""
+    paths = RupPaths(tmp_path)
+    state = StateManager(paths)
+    state_dir = tmp_path / ".rup"
+    state_dir.mkdir(parents=True, exist_ok=True)
+
+    (state_dir / "RUP_DISCOVERY.json").write_text(
+        json.dumps({"x": 1}), encoding="utf-8"
+    )
+    (state_dir / "RUP_DISCOVERY.md").write_text("# Discovery", encoding="utf-8")
+
+    state._rebuild_artifact_ledger()
+
+    names = {e["name"] for e in state._artifact_ledger}
+    assert "RUP_DISCOVERY.json" in names
+    assert "RUP_DISCOVERY.md" in names
+
+    json_entry = next(e for e in state._artifact_ledger if e["name"] == "RUP_DISCOVERY.json")
+    assert json_entry["type"] == "json"
+    assert json_entry["phase"] == "discovery"
+    assert json_entry["sha256"]
+
+    md_entry = next(e for e in state._artifact_ledger if e["name"] == "RUP_DISCOVERY.md")
+    assert md_entry["type"] == "markdown"
+    assert md_entry["phase"] == "discovery"
+
+
+def test_fresh_state_manager_recovers_ledger_from_disk(tmp_path):
+    """A new StateManager must rebuild the ledger from existing .rup/ artifacts."""
+    paths = RupPaths(tmp_path)
+    original = StateManager(paths)
+    original.save_json({"phase": "discovery"}, "RUP_DISCOVERY.json")
+    original.update_session_state("discovery")
+
+    fresh = StateManager(paths)
+    manifest = fresh.generate_and_save_manifest(
+        phases_completed=["discovery"],
+        selected_items=[],
+        execution_changes_count=0,
+        verification_status="pending",
+    )
+
+    artifact_names = {a["name"] for a in manifest["artifacts"]}
+    assert "RUP_DISCOVERY.json" in artifact_names
+    assert "session-state.json" in artifact_names
+    assert "run-manifest.json" not in artifact_names
+
+
+def test_generate_and_save_manifest_rebuilds_full_ledger(tmp_path):
+    """generate_and_save_manifest must record every lifecycle artifact on disk."""
+    paths = RupPaths(tmp_path)
+    state = StateManager(paths)
+    state_dir = tmp_path / ".rup"
+    state_dir.mkdir(parents=True, exist_ok=True)
+
+    lifecycle_artifacts = [
+        "RUP_DISCOVERY.json",
+        "RUP_PLAN.json",
+        "RUP_EXECUTION.json",
+        "RUP_VERIFICATION.json",
+        "RUP_FINAL_REPORT.json",
+        "RUP_DISCOVERY.md",
+        "RUP_PLAN.md",
+        "RUP_EXECUTION.md",
+        "RUP_VERIFICATION.md",
+        "RUP_FINAL_REPORT.md",
+        "session-state.json",
+    ]
+    for name in lifecycle_artifacts:
+        content = json.dumps({}) if name.endswith(".json") else "# report"
+        (state_dir / name).write_text(content, encoding="utf-8")
+
+    manifest = state.generate_and_save_manifest(
+        phases_completed=["discovery", "planning", "execution", "verification", "reporting"],
+        selected_items=["ITEM-001"],
+        execution_changes_count=1,
+        verification_status="passed",
+    )
+
+    artifact_names = {a["name"] for a in manifest["artifacts"]}
+    for name in lifecycle_artifacts:
+        assert name in artifact_names, f"{name} missing from manifest artifacts"
+    assert "run-manifest.json" not in artifact_names
+
+    loaded = state.load_json("run-manifest.json")
+    assert loaded["artifacts"] == manifest["artifacts"]

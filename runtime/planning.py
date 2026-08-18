@@ -119,27 +119,48 @@ class PlanningPhase:
         return backlog
 
     def _select_work(self, backlog: List[Dict[str, Any]]) -> List[str]:
-        """Select items within the time budget, prioritizing P0 > P1 > P2 > P3."""
-        # Sort by priority rank
+        """Select items within time budget, max files, and risk tolerance."""
         priority_rank = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
-        sorted_backlog = sorted(backlog, key=lambda x: (priority_rank.get(x["priority"], 9), x["estimated_effort_minutes"]))
+        risk_rank = {"low": 0, "medium": 1, "high": 2}
+        sorted_backlog = sorted(
+            backlog,
+            key=lambda x: (priority_rank.get(x["priority"], 9), x["estimated_effort_minutes"]),
+        )
 
         selected = []
         allocated_minutes = 0
+        selected_files = 0
+        tolerance_rank = risk_rank.get(self.risk_tolerance, 1)
 
         for item in sorted_backlog:
             mins = item["estimated_effort_minutes"]
+            file_count = max(1, len(item.get("scope", {}).get("files", [])))
+            item_risk_rank = risk_rank.get(item.get("risk", "low"), 0)
+
             if item["priority"] == "P0":
                 # P0 items are mandatory
                 selected.append(item["id"])
                 allocated_minutes += mins
-            elif allocated_minutes + mins <= self.time_budget_minutes:
+                selected_files += file_count
+            elif (
+                item_risk_rank <= tolerance_rank
+                and allocated_minutes + mins <= self.time_budget_minutes
+                and selected_files + file_count <= self.max_files
+            ):
                 selected.append(item["id"])
                 allocated_minutes += mins
+                selected_files += file_count
 
-        # If budget allows and no P0/P1 exceeded, select at least high-value items
+        # Fallback: select a single feasible high-value item if nothing else fit.
         if not selected and backlog:
-            selected.append(backlog[0]["id"])
+            for item in sorted_backlog:
+                file_count = max(1, len(item.get("scope", {}).get("files", [])))
+                item_risk_rank = risk_rank.get(item.get("risk", "low"), 0)
+                if item["priority"] == "P0" or (
+                    item_risk_rank <= tolerance_rank and file_count <= self.max_files
+                ):
+                    selected.append(item["id"])
+                    break
 
         return selected
 
@@ -196,7 +217,14 @@ class PlanningPhase:
 
         total_effort = sum(b["estimated_effort_minutes"] for b in selected_items)
 
+        constraints = {
+            "time_budget_minutes": self.time_budget_minutes,
+            "max_files": self.max_files,
+            "risk_tolerance": self.risk_tolerance,
+        }
+
         plan_data = {
+            "constraints": constraints,
             "backlog": backlog,
             "selected_items": selected_ids,
             "execution_order": execution_order,

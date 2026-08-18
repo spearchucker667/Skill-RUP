@@ -126,6 +126,33 @@ def check_run_identity(target_dir: Path) -> List[str]:
     return errors
 
 
+def check_manifest_artifacts(target_dir: Path) -> List[str]:
+    """Ensure run-manifest.json lists every lifecycle artifact produced."""
+    errors = []
+    state_dir = target_dir / ".rup"
+    manifest_path = state_dir / "run-manifest.json"
+    if not manifest_path.exists():
+        errors.append("run-manifest.json is missing")
+        return errors
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    recorded_names = {a.get("name") for a in manifest.get("artifacts", [])}
+
+    for name in EXPECTED_ARTIFACTS:
+        if name not in recorded_names:
+            errors.append(f"Run manifest missing artifact entry: {name}")
+
+    required_fields = {"name", "sha256", "created_at", "run_id", "phase", "type", "relative_path"}
+    for artifact in manifest.get("artifacts", []):
+        missing = required_fields - set(artifact.keys())
+        if missing:
+            errors.append(
+                f"Artifact entry {artifact.get('name')} missing required fields: {sorted(missing)}"
+            )
+
+    return errors
+
+
 def check_fixture_specific(target_dir: Path, fixture_name: str) -> List[str]:
     errors = []
     state_dir = target_dir / ".rup"
@@ -189,6 +216,7 @@ def run_fixture(fixture_name: str, fixtures_base: Path) -> Tuple[bool, List[str]
                 errors.extend(check_artifacts(target_dir))
                 if not errors:
                     errors.extend(check_run_identity(target_dir))
+                    errors.extend(check_manifest_artifacts(target_dir))
                 errors.extend(check_fixture_specific(target_dir, fixture_name))
             return (not errors), errors
 
@@ -203,6 +231,7 @@ def run_fixture(fixture_name: str, fixtures_base: Path) -> Tuple[bool, List[str]
         errors.extend(check_artifacts(target_dir))
         if not errors:
             errors.extend(check_run_identity(target_dir))
+            errors.extend(check_manifest_artifacts(target_dir))
             errors.extend(check_fixture_specific(target_dir, fixture_name))
 
         return (not errors), errors

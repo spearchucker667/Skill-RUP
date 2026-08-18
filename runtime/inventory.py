@@ -33,12 +33,33 @@ EXT_TO_LANG = {
     '.sh': 'shell',
     '.bash': 'shell',
     '.zsh': 'shell',
+    '.kt': 'kotlin',
+    '.kts': 'kotlin',
+    '.scala': 'scala',
+    '.sc': 'scala',
+    '.swift': 'swift',
+    '.lua': 'lua',
+    '.pl': 'perl',
+    '.pm': 'perl',
+    '.ps1': 'powershell',
+    '.r': 'r',
+    '.R': 'r',
     '.html': 'html',
     '.css': 'css',
     '.yaml': 'yaml',
     '.yml': 'yaml',
     '.json': 'json',
     '.md': 'markdown'
+}
+
+# Languages that participate in percentage-based primary-language classification
+# and lockfile gap analysis. Data/config/markup languages are excluded so that
+# e.g. package-lock.json or README.md do not become the "primary language" or
+# trigger bogus "missing dependency lockfile" findings.
+EXECUTABLE_LANGUAGES = {
+    'python', 'javascript', 'typescript', 'go', 'rust', 'java', 'cpp', 'c',
+    'csharp', 'ruby', 'php', 'shell', 'kotlin', 'scala', 'swift', 'lua',
+    'perl', 'powershell', 'r',
 }
 
 LOCKFILES = {
@@ -92,11 +113,15 @@ class InventoryManager:
             except Exception as e:
                 warnings.warn(f"Inventory line-count failed for {file_path}: {e}", RuntimeWarning, stacklevel=2)
 
-        # Language breakdown
+        # Language breakdown: percentages are computed only over executable
+        # languages. Data/config/markup files still count toward total LOC/file
+        # counts, but they do not participate in primary-language classification
+        # or lockfile gap analysis.
         languages = []
-        code_loc = sum(counts.values())
+        executable_counts = {lang: lines for lang, lines in counts.items() if lang in EXECUTABLE_LANGUAGES}
+        code_loc = sum(executable_counts.values())
         if code_loc > 0:
-            for lang, lines in counts.items():
+            for lang, lines in executable_counts.items():
                 pct = round((lines / code_loc) * 100, 2)
                 languages.append({
                     "name": lang,

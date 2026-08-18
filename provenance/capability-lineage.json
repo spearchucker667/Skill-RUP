@@ -1,11 +1,11 @@
 [
   {
     "id": "rup.phase_1_discovery.1.1",
-    "category": "discovery",
+    "category": "1_discovery",
     "title": "Repository Inventory",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/inventory.py",
       "runtime/discovery.py"
@@ -14,9 +14,10 @@
       "InventoryManager",
       "DiscoveryPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_discovery.py::test_discovery_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -26,11 +27,11 @@
   },
   {
     "id": "rup.phase_1_discovery.1.2",
-    "category": "discovery",
+    "category": "1_discovery",
     "title": "Tooling Detection",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/tool_detection.py",
       "runtime/discovery.py"
@@ -39,9 +40,10 @@
       "ToolDetector",
       "DiscoveryPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_discovery.py::test_discovery_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -51,20 +53,21 @@
   },
   {
     "id": "rup.phase_1_discovery.1.3",
-    "category": "discovery",
+    "category": "1_discovery",
     "title": "Quality Assessment",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/discovery.py"
     ],
     "required_symbols": [
       "DiscoveryPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_discovery.py::test_discovery_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -74,11 +77,11 @@
   },
   {
     "id": "rup.phase_1_discovery.1.4",
-    "category": "discovery",
+    "category": "1_discovery",
     "title": "Security Assessment",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/discovery.py",
       "runtime/redaction.py"
@@ -87,9 +90,10 @@
       "DiscoveryPhase",
       "scan_secrets"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_discovery.py::test_discovery_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -99,20 +103,21 @@
   },
   {
     "id": "rup.phase_1_discovery.1.5",
-    "category": "discovery",
+    "category": "1_discovery",
     "title": "Documentation Assessment",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/discovery.py"
     ],
     "required_symbols": [
       "DiscoveryPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_discovery.py::test_discovery_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -122,20 +127,21 @@
   },
   {
     "id": "rup.phase_1_discovery.1.6",
-    "category": "discovery",
+    "category": "1_discovery",
     "title": "Governance Assessment",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/discovery.py"
     ],
     "required_symbols": [
       "DiscoveryPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_discovery.py::test_discovery_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -145,20 +151,21 @@
   },
   {
     "id": "rup.phase_1_discovery.1.7",
-    "category": "discovery",
-    "title": "Gap Analysis & Scoring",
+    "category": "1_discovery",
+    "title": "Gap Analysis",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/discovery.py"
     ],
     "required_symbols": [
       "DiscoveryPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_discovery.py::test_discovery_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -168,20 +175,21 @@
   },
   {
     "id": "rup.phase_2_planning.2.1",
-    "category": "planning",
+    "category": "2_planning",
     "title": "Backlog Generation",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/planning.py"
     ],
     "required_symbols": [
       "PlanningPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_plan.py::test_plan_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -191,20 +199,21 @@
   },
   {
     "id": "rup.phase_2_planning.2.2",
-    "category": "planning",
+    "category": "2_planning",
     "title": "Risk Analysis",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/planning.py"
     ],
     "required_symbols": [
       "PlanningPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_plan.py::test_plan_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -214,20 +223,21 @@
   },
   {
     "id": "rup.phase_2_planning.2.3",
-    "category": "planning",
-    "title": "Work Selection & Budgeting",
+    "category": "2_planning",
+    "title": "Work Selection",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/planning.py"
     ],
     "required_symbols": [
       "PlanningPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_plan.py::test_plan_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -237,20 +247,21 @@
   },
   {
     "id": "rup.phase_2_planning.2.4",
-    "category": "planning",
-    "title": "Execution Planning & Checkpoints",
+    "category": "2_planning",
+    "title": "Execution Planning",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/planning.py"
     ],
     "required_symbols": [
       "PlanningPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_plan.py::test_plan_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -264,16 +275,17 @@
     "title": "Workstream Dispatch & Fix Implementation",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "structurally_verified",
     "implementation": [
       "runtime/execution.py"
     ],
     "required_symbols": [
       "ExecutionPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_execute.py::test_execute_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -283,20 +295,21 @@
   },
   {
     "id": "rup.phase_4_verification.4.1",
-    "category": "verification",
-    "title": "Test Verification (3-run & flakiness)",
+    "category": "4_verification",
+    "title": "Test Verification",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "structurally_verified",
     "implementation": [
       "runtime/verification.py"
     ],
     "required_symbols": [
       "VerificationPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_verify.py::test_verify_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -306,20 +319,21 @@
   },
   {
     "id": "rup.phase_4_verification.4.2",
-    "category": "verification",
+    "category": "4_verification",
     "title": "Lint Verification",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "structurally_verified",
     "implementation": [
       "runtime/verification.py"
     ],
     "required_symbols": [
       "VerificationPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_verify.py::test_verify_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -329,20 +343,21 @@
   },
   {
     "id": "rup.phase_4_verification.4.3",
-    "category": "verification",
+    "category": "4_verification",
     "title": "Security Verification",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "structurally_verified",
     "implementation": [
       "runtime/verification.py"
     ],
     "required_symbols": [
       "VerificationPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_verify.py::test_verify_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -352,20 +367,45 @@
   },
   {
     "id": "rup.phase_4_verification.4.4",
-    "category": "verification",
-    "title": "Build & Type Verification",
+    "category": "4_verification",
+    "title": "Build Verification",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "structurally_verified",
     "implementation": [
       "runtime/verification.py"
     ],
     "required_symbols": [
       "VerificationPhase"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_verify.py::test_verify_execution"
     ],
+    "semantic_tests": [],
+    "translation_type": "agent-native-deterministic",
+    "canonical_source": {
+      "repository": "https://github.com/spearchucker667/RUP-Protocol",
+      "version": "3.0.0",
+      "commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb"
+    }
+  },
+  {
+    "id": "rup.phase_4_verification.4.5",
+    "category": "4_verification",
+    "title": "Documentation Verification",
+    "mandatory": true,
+    "port_status": "ported",
+    "verification_level": "structurally_verified",
+    "implementation": [
+      "runtime/verification.py"
+    ],
+    "required_symbols": [
+      "VerificationPhase"
+    ],
+    "runtime_smoke_tests": [
+      "tests/forward/test_verify.py::test_verify_execution"
+    ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -375,11 +415,11 @@
   },
   {
     "id": "rup.phase_4_verification.4.6",
-    "category": "reporting",
-    "title": "Final Report Generation",
+    "category": "4_verification",
+    "title": "Report Generation",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "structurally_verified",
     "implementation": [
       "runtime/reporting.py",
       "runtime/artifact_builder.py"
@@ -388,9 +428,10 @@
       "ReportingPhase",
       "ArtifactBuilder"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/forward/test_report.py::test_report_execution"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -414,7 +455,8 @@
       "check_prompt_injection",
       "redact_secrets"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [],
+    "semantic_tests": [
       "tests/test_security_scanning.py::test_prompt_injection_detection",
       "tests/test_security_scanning.py::test_yaml_alias_bomb_rejected",
       "tests/test_security_scanning.py::test_yaml_unsafe_object_rejected"
@@ -432,7 +474,7 @@
     "title": "Run Manifest & State Management",
     "mandatory": true,
     "port_status": "ported",
-    "verification_level": "behaviorally_verified",
+    "verification_level": "runtime_smoke_verified",
     "implementation": [
       "runtime/state.py",
       "runtime/models.py"
@@ -441,9 +483,10 @@
       "StateManager",
       "RunManifest"
     ],
-    "behavioral_tests": [
+    "runtime_smoke_tests": [
       "tests/test_state.py::test_state_trust_boundary"
     ],
+    "semantic_tests": [],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",

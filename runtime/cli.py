@@ -16,10 +16,18 @@ from .verification import VerificationPhase
 from .reporting import ReportingPhase
 from .__init__ import __version__, __protocol_version__
 
-def run_discovery(target_dir: Path, state_dir: Optional[Path] = None, run_id: Optional[str] = None):
-    paths = RupPaths(target_dir, state_dir=state_dir)
-    state = StateManager(paths, run_id=run_id)
-    builder = ArtifactBuilder(paths)
+def run_discovery(
+    target_dir: Path,
+    state_dir: Optional[Path] = None,
+    run_id: Optional[str] = None,
+    state: Optional[StateManager] = None,
+):
+    if state is not None:
+        paths = state.paths
+    else:
+        paths = RupPaths(target_dir, state_dir=state_dir)
+        state = StateManager(paths, run_id=run_id)
+    builder = ArtifactBuilder(paths, state=state)
     print(f"[RUP] Starting Discovery on {target_dir.resolve()} (Run ID: {state.run_id})...")
     phase = DiscoveryPhase(target_dir, state, builder)
     res = phase.execute()
@@ -33,11 +41,15 @@ def run_plan(
     run_id: Optional[str] = None,
     time_budget: int = 45,
     max_files: int = 20,
-    risk_tolerance: str = "medium"
+    risk_tolerance: str = "medium",
+    state: Optional[StateManager] = None,
 ):
-    paths = RupPaths(target_dir, state_dir=state_dir)
-    state = StateManager(paths, run_id=run_id)
-    builder = ArtifactBuilder(paths)
+    if state is not None:
+        paths = state.paths
+    else:
+        paths = RupPaths(target_dir, state_dir=state_dir)
+        state = StateManager(paths, run_id=run_id)
+    builder = ArtifactBuilder(paths, state=state)
     print(f"[RUP] Starting Planning (Budget: {time_budget}m, Tolerance: {risk_tolerance})...")
     phase = PlanningPhase(
         target_dir,
@@ -52,10 +64,18 @@ def run_plan(
     print(f"[RUP] Planning complete. Selected {len(res.get('selected_items', []))} items for execution.")
     return res
 
-def run_execute(target_dir: Path, state_dir: Optional[Path] = None, run_id: Optional[str] = None):
-    paths = RupPaths(target_dir, state_dir=state_dir)
-    state = StateManager(paths, run_id=run_id)
-    builder = ArtifactBuilder(paths)
+def run_execute(
+    target_dir: Path,
+    state_dir: Optional[Path] = None,
+    run_id: Optional[str] = None,
+    state: Optional[StateManager] = None,
+):
+    if state is not None:
+        paths = state.paths
+    else:
+        paths = RupPaths(target_dir, state_dir=state_dir)
+        state = StateManager(paths, run_id=run_id)
+    builder = ArtifactBuilder(paths, state=state)
     print(f"[RUP] Starting Execution...")
     phase = ExecutionPhase(target_dir, state, builder)
     res = phase.execute()
@@ -63,17 +83,28 @@ def run_execute(target_dir: Path, state_dir: Optional[Path] = None, run_id: Opti
     print(f"[RUP] Execution complete. Applied {len(res.get('changes', []))} changes.")
     return res
 
-def run_verify(target_dir: Path, state_dir: Optional[Path] = None, run_id: Optional[str] = None, strict: bool = False) -> bool:
-    paths = RupPaths(target_dir, state_dir=state_dir)
-    state = StateManager(paths, run_id=run_id)
-    builder = ArtifactBuilder(paths)
-    print(f"[RUP] Starting Multi-Gate Verification...")
-    phase = VerificationPhase(target_dir, state, builder, strict=strict)
+def run_verify(
+    target_dir: Path,
+    state_dir: Optional[Path] = None,
+    run_id: Optional[str] = None,
+    strict: bool = False,
+    risk_tolerance: str = "medium",
+    state: Optional[StateManager] = None,
+) -> bool:
+    if state is not None:
+        paths = state.paths
+    else:
+        paths = RupPaths(target_dir, state_dir=state_dir)
+        state = StateManager(paths, run_id=run_id)
+    builder = ArtifactBuilder(paths, state=state)
+    effective_strict = strict or risk_tolerance == "low"
+    print(f"[RUP] Starting Multi-Gate Verification (strict={effective_strict})...")
+    phase = VerificationPhase(target_dir, state, builder, strict=effective_strict)
     out = phase.execute()
     state.update_session_state("verification")
     status = out["verification_results"]["overall_status"]
     print(f"[RUP] Verification complete. Status: {status.upper()}.")
-    if strict:
+    if effective_strict:
         return status == "passed"
     return status in ("passed", "passed_with_warnings")
 
@@ -86,10 +117,18 @@ def run_migrate(target_dir: Path, state_dir: Optional[Path] = None, run_id: Opti
     return result
 
 
-def run_report(target_dir: Path, state_dir: Optional[Path] = None, run_id: Optional[str] = None):
-    paths = RupPaths(target_dir, state_dir=state_dir)
-    state = StateManager(paths, run_id=run_id)
-    builder = ArtifactBuilder(paths)
+def run_report(
+    target_dir: Path,
+    state_dir: Optional[Path] = None,
+    run_id: Optional[str] = None,
+    state: Optional[StateManager] = None,
+):
+    if state is not None:
+        paths = state.paths
+    else:
+        paths = RupPaths(target_dir, state_dir=state_dir)
+        state = StateManager(paths, run_id=run_id)
+    builder = ArtifactBuilder(paths, state=state)
     print(f"[RUP] Generating Final Report...")
     phase = ReportingPhase(target_dir, state, builder)
     res = phase.execute()
@@ -119,13 +158,12 @@ def run_full_lifecycle(
     """Execute complete 4-phase RUP lifecycle."""
     paths = RupPaths(target_dir, state_dir=state_dir)
     state = StateManager(paths)
-    run_id = state.run_id
 
-    run_discovery(target_dir, state_dir=state_dir, run_id=run_id)
-    run_plan(target_dir, state_dir=state_dir, run_id=run_id, time_budget=time_budget, max_files=max_files, risk_tolerance=risk_tolerance)
-    run_execute(target_dir, state_dir=state_dir, run_id=run_id)
-    passed = run_verify(target_dir, state_dir=state_dir, run_id=run_id, strict=strict)
-    run_report(target_dir, state_dir=state_dir, run_id=run_id)
+    run_discovery(target_dir, state=state)
+    run_plan(target_dir, time_budget=time_budget, max_files=max_files, risk_tolerance=risk_tolerance, state=state)
+    run_execute(target_dir, state=state)
+    passed = run_verify(target_dir, strict=strict, risk_tolerance=risk_tolerance, state=state)
+    run_report(target_dir, state=state)
 
     return 0 if passed else 1
 
@@ -170,7 +208,12 @@ def main():
         elif args.phase == "execute":
             run_execute(args.target, state_dir=args.state_dir)
         elif args.phase == "verify":
-            if not run_verify(args.target, state_dir=args.state_dir, strict=args.strict):
+            if not run_verify(
+                args.target,
+                state_dir=args.state_dir,
+                strict=args.strict,
+                risk_tolerance=args.risk_tolerance,
+            ):
                 print("[RUP] Verification failed.", file=sys.stderr)
                 return 1
         elif args.phase == "report":

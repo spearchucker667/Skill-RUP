@@ -40,46 +40,6 @@
     },
     "verification_status": {
       "type": "string"
-    },
-    "artifacts": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "sha256",
-          "created_at",
-          "run_id",
-          "phase",
-          "type",
-          "relative_path"
-        ],
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "sha256": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "run_id": {
-            "type": "string"
-          },
-          "phase": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          },
-          "relative_path": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      }
     }
   },
   "required": [

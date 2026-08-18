@@ -26,6 +26,17 @@
           "unmapped"
         ]
       },
+      "verification_level": {
+        "type": "string",
+        "enum": [
+          "unverified",
+          "present",
+          "structurally_verified",
+          "runtime_smoke_verified",
+          "behaviorally_verified",
+          "canonical_parity_verified"
+        ]
+      },
       "implementation": {
         "type": "array",
         "items": {
@@ -38,15 +49,20 @@
           "type": "string"
         }
       },
+      "runtime_smoke_tests": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "semantic_tests": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
       "translation_type": {
         "type": "string"
-      },
-      "semantic_equivalence": {
-        "type": "string",
-        "enum": [
-          "preserved",
-          "unverified"
-        ]
       },
       "canonical_source": {
         "type": "object"
@@ -55,8 +71,9 @@
     "required": [
       "id",
       "port_status",
+      "verification_level",
       "implementation",
-      "semantic_equivalence"
+      "required_symbols"
     ]
   }
 }

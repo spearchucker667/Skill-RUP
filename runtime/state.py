@@ -186,6 +186,65 @@ class StateManager:
             warnings.warn(f"Target commit query failed: {e}", RuntimeWarning, stacklevel=2)
         return "UNKNOWN_UNCOMMITTED"
 
+    def _rebuild_artifact_ledger(self) -> None:
+        """Ensure every artifact on disk in the state directory is recorded.
+
+        Existing ledger entries are preserved so original creation timestamps are
+        retained. Missing JSON and Markdown artifacts are appended using their
+        current SHA-256 and modification time. This makes the final run manifest
+        complete even when individual lifecycle phases are invoked with fresh
+        ``StateManager`` instances.
+        """
+        if not self.paths.state_dir.exists():
+            return
+
+        existing = {entry["name"] for entry in self._artifact_ledger}
+        for path in sorted(self.paths.state_dir.iterdir()):
+            if not path.is_file():
+                continue
+            if path.name.startswith("."):
+                continue
+            if path.name == "run-manifest.json":
+                # The manifest records other artifacts, not itself.
+                continue
+            if path.suffix not in (".json", ".md"):
+                continue
+            if path.name in existing:
+                continue
+
+            try:
+                sha256 = _compute_sha256(path)
+            except Exception as e:
+                warnings.warn(
+                    f"Could not hash artifact {path.name}: {e}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                sha256 = ""
+
+            mtime = path.stat().st_mtime
+            dt = datetime.datetime.fromtimestamp(mtime, tz=datetime.timezone.utc)
+            created_at = dt.isoformat()
+            if not created_at.endswith("Z"):
+                created_at = created_at.replace("+00:00", "Z")
+
+            try:
+                rel_path = str(path.relative_to(self.paths.state_dir))
+            except ValueError:
+                rel_path = str(path)
+
+            self._artifact_ledger.append(
+                {
+                    "name": path.name,
+                    "sha256": sha256,
+                    "created_at": created_at,
+                    "run_id": self.run_id,
+                    "phase": _infer_artifact_phase(path.name),
+                    "type": "json" if path.suffix == ".json" else "markdown",
+                    "relative_path": rel_path,
+                }
+            )
+
     def generate_and_save_manifest(
         self,
         phases_completed: List[str],
@@ -197,6 +256,10 @@ class StateManager:
         now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
         if not now_str.endswith("Z"):
             now_str = now_str.replace("+00:00", "Z")
+
+        # Make sure every artifact written to .rup/ is represented in the manifest,
+        # regardless of whether the same StateManager instance observed the write.
+        self._rebuild_artifact_ledger()
 
         manifest = {
             "run_id": self.run_id,

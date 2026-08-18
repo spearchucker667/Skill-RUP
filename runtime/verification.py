@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .artifact_builder import ArtifactBuilder
 from .command_runner import run_command
+from .inventory import InventoryManager
 from .redaction import scan_file_for_secrets
 from .security import scan_content_for_threats
 from .state import StateManager
@@ -39,6 +40,9 @@ class VerificationPhase:
         self.artifact_builder = artifact_builder
         self.strict = strict
         self._tools = ToolDetector(target_dir).detect_all()
+        self._primary_language = InventoryManager(target_dir).analyze_inventory().get(
+            "primary_language", "unknown"
+        )
 
     # ------------------------------------------------------------------
     # Helpers
@@ -63,7 +67,10 @@ class VerificationPhase:
         """Yield project files, skipping well-known dependency/build/vcs dirs."""
         if not self._is_dir():
             return
-        skip_parts = {".git", ".venv", "venv", "node_modules", "dist", "build", ".rup", "__pycache__"}
+        skip_parts = {
+            ".git", ".venv", "venv", "node_modules", "dist", "build", ".rup",
+            "__pycache__", ".pytest_cache", ".coverage", "htmlcov", ".tox",
+        }
         for p in self.target_dir.rglob("*"):
             if p.is_file() and not any(part in p.parts for part in skip_parts):
                 include = False
@@ -254,6 +261,74 @@ class VerificationPhase:
 
         return passed, failed, skipped
 
+    def _collect_coverage(self, test_cmd: List[str]) -> Optional[float]:
+        """Collect a real coverage percentage when the ecosystem supports it.
+
+        Coverage collection is best-effort: if the required tooling is missing or
+        the coverage run fails, ``None`` is returned rather than fabricating a
+        value. Any temporary coverage data files created in the target directory
+        are removed before returning.
+        """
+        framework = self._tools.get("test_framework")
+        coverage_files_before = set(self.target_dir.glob(".coverage*"))
+
+        try:
+            if framework == "pytest":
+                if not self._python_module_available("coverage"):
+                    return None
+                # Preserve any extra arguments from the detected test command.
+                extra_args = test_cmd[2:] if len(test_cmd) > 2 else []
+                cmd = [sys.executable, "-m", "coverage", "run", "--source=.", "-m", "pytest"] + extra_args
+                rc, stdout, stderr = run_command(cmd, cwd=self.target_dir, timeout=180)
+                if rc != 0:
+                    return None
+                rc2, stdout2, _ = run_command(
+                    [sys.executable, "-m", "coverage", "report"],
+                    cwd=self.target_dir,
+                    timeout=60,
+                )
+                if rc2 != 0:
+                    return None
+                for line in reversed(stdout2.splitlines()):
+                    parts = line.split()
+                    if parts and parts[0] == "TOTAL":
+                        try:
+                            return float(parts[-1].replace("%", ""))
+                        except ValueError:
+                            return None
+                return None
+
+            if framework in ("jest", "vitest", "mocha", "npm-test") or (
+                framework is None and self._tools.get("build_tool") in ("npm", "pnpm", "yarn")
+            ):
+                cmd = test_cmd + ["--coverage"]
+                rc, stdout, stderr = run_command(cmd, cwd=self.target_dir, timeout=180)
+                if rc != 0:
+                    return None
+                combined = stdout + "\n" + stderr
+                # Istanbul-style table: "All files | 95 | 80 | 100 | 95%"
+                m = re.search(
+                    r"All files\s*\|[\s\d.]+\|[\s\d.]+\|[\s\d.]+\|\s*([\d.]+)%",
+                    combined,
+                )
+                if m:
+                    return float(m.group(1))
+                # jest older output
+                m = re.search(r"Statements\s*:\s*([\d.]+)%", combined)
+                if m:
+                    return float(m.group(1))
+                return None
+
+            return None
+        finally:
+            for cov_file in self.target_dir.glob(".coverage*"):
+                if cov_file in coverage_files_before:
+                    continue
+                try:
+                    cov_file.unlink()
+                except Exception:
+                    pass
+
     def _run_tests_with_flakiness(self) -> Dict[str, Any]:
         """Execute test runner 3x to detect flakiness and gather real pass/fail counts."""
         cmd = self._test_command()
@@ -299,6 +374,8 @@ class VerificationPhase:
         if any_passed and not all_passed:
             flaky.append("Primary test suite showed non-deterministic failure across 3 runs")
 
+        coverage_after = self._collect_coverage(cmd) if cmd else None
+
         return {
             "executed": True,
             "passed": max_passed if all_passed else 0,
@@ -306,7 +383,7 @@ class VerificationPhase:
             "skipped": max_skipped,
             "duration_seconds": round(total_duration, 2),
             "coverage_before": None,
-            "coverage_after": None,
+            "coverage_after": coverage_after,
             "flaky_tests": flaky,
             "new_tests_added": 0,
             "tool": " ".join(cmd),
@@ -315,6 +392,24 @@ class VerificationPhase:
     # ------------------------------------------------------------------
     # Lint
     # ------------------------------------------------------------------
+    def _count_lint_violations(self, linter: str, cmd: List[str]) -> Tuple[int, str]:
+        """Run the linter and return a precise violation count plus raw output."""
+        if linter == "ruff":
+            # Prefer JSON output for an exact count; fall back to line counting.
+            json_cmd = cmd + ["--output-format=json"]
+            rc, stdout, _ = self._run_tool(json_cmd, timeout=120)
+            try:
+                data = json.loads(stdout)
+                if isinstance(data, list):
+                    return len(data), stdout
+            except Exception:
+                pass
+
+        rc, stdout, _ = self._run_tool(cmd, timeout=120)
+        if rc != 0:
+            return len([line for line in stdout.splitlines() if line.strip()]), stdout
+        return 0, stdout
+
     def _run_lint(self) -> Dict[str, Any]:
         linter = self._tools.get("linter")
         if linter is None:
@@ -335,24 +430,29 @@ class VerificationPhase:
         if cmd is None:
             return self._schema_lint_not_run("unavailable", f"Unsupported linter: {linter}", tool=linter)
 
-        rc, stdout, _ = self._run_tool(cmd, timeout=120)
-        violations = 0
-        if rc != 0:
-            # Rough count of reported violations from stdout lines.
-            violations = len([line for line in stdout.splitlines() if line.strip()])
+        violations, lint_stdout = self._count_lint_violations(linter, cmd)
 
         return {
             "executed": True,
             "violations_before": 0,
             "violations_after": violations,
             "auto_fixed": 0,
-            "new_violations": stdout.splitlines() if violations else [],
+            "new_violations": lint_stdout.splitlines() if violations else [],
             "tool": linter,
         }
 
     # ------------------------------------------------------------------
     # Build
     # ------------------------------------------------------------------
+    def _count_build_warnings(self, build_tool: str, stdout: str, stderr: str) -> int:
+        """Count compiler/package-manager warnings in a tool-specific way."""
+        combined = stdout + "\n" + stderr
+        if build_tool == "cargo":
+            return len(re.findall(r"^warning:", combined, re.MULTILINE))
+        if build_tool in ("npm", "pnpm", "yarn"):
+            return combined.lower().count("warning")
+        return combined.count("warning:")
+
     def _run_build(self) -> Dict[str, Any]:
         build_tool = self._tools.get("build_tool")
         if build_tool is None:
@@ -395,7 +495,7 @@ class VerificationPhase:
         return {
             "executed": True,
             "succeeded": rc == 0,
-            "warnings": stdout.count("warning:") + stderr.count("warning:"),
+            "warnings": self._count_build_warnings(build_tool, stdout, stderr),
             "duration_seconds": round(elapsed, 2),
             "tool": build_tool,
         }

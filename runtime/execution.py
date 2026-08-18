@@ -1,7 +1,9 @@
 """
 Execution phase module for RUP deterministic runtime.
 Implements canonical Phase 3 Execution per RUP-EXEC-001..007:
-- Workstream selection & dispatch (ws_bugs, ws_tests, ws_ci, ws_docs, ws_governance, ws_security)
+- Subtype-aware workstream dispatch (bug, test_framework, linter, type_checker,
+  secret_exposure, security_policy, lockfile, ci, readme, contributing,
+  codeowners, license, container, iac, observability)
 - Baseline Git status capture and RUP-only change attribution
 - Genuine remediation of planned backlog items
 - Per-item local verification & change tracking
@@ -18,6 +20,8 @@ from .artifact_builder import ArtifactBuilder
 from .command_runner import run_command
 from .state import StateManager
 from .tool_detection import ToolDetector
+
+RISK_RANK = {"low": 0, "medium": 1, "high": 2}
 
 
 class ExecutionPhase:
@@ -93,6 +97,20 @@ class ExecutionPhase:
                 or "vitest.config" in lower
                 or "test_" in file_path
             )
+        if category == "dx":
+            return lower in {
+                "ruff.toml",
+                ".ruff.toml",
+                "mypy.ini",
+                ".mypy.ini",
+                "pyproject.toml",
+                "tsconfig.json",
+                ".eslintrc.json",
+                ".eslintrc.js",
+                ".eslintrc.cjs",
+                "eslint.config.js",
+                "eslint.config.mjs",
+            }
         if category == "ci":
             return (
                 file_path.startswith(".github/workflows/")
@@ -117,6 +135,76 @@ class ExecutionPhase:
             return False
         return False
 
+    @staticmethod
+    def _item_subtype(item: Dict[str, Any]) -> str:
+        """Derive the remediation subtype from the backlog item id and title.
+
+        Subtype dispatch is authoritative; category is only used as a fallback
+        for legacy or unrecognized items.
+        """
+        item_id = item.get("id", "")
+        title = item.get("title", "")
+        category = item.get("category", "")
+        lower_title = title.lower()
+
+        # Bugs
+        if item_id.startswith("BUG") or category == "bugs":
+            return "bug"
+
+        # Tests
+        if item_id.startswith("TEST") or category == "tests":
+            return "test_framework"
+
+        # Developer experience (lint / type)
+        if item_id.startswith("LINT") or (
+            category == "dx" and "linter" in lower_title
+        ):
+            return "linter"
+        if item_id.startswith("TYPE") or (
+            category == "dx" and "type" in lower_title
+        ):
+            return "type_checker"
+
+        # Security
+        if item_id.startswith("SEC"):
+            if item_id == "SEC-001" or "secret" in lower_title:
+                return "secret_exposure"
+            if item_id.startswith("SEC-1") or "lockfile" in lower_title:
+                return "lockfile"
+            if "security" in lower_title or "policy" in lower_title:
+                return "security_policy"
+            return "security"
+
+        # CI/CD
+        if item_id.startswith("CI") or category == "ci":
+            return "ci"
+
+        # Documentation
+        if item_id.startswith("DOCS") or category == "docs":
+            if "README" in item_id or "readme" in lower_title:
+                return "readme"
+            if "CONTRIBUTING" in item_id or "contributing" in lower_title:
+                return "contributing"
+            return "docs"
+
+        # Governance
+        if item_id.startswith("GOV") or category == "governance":
+            if "CODEOWNERS" in item_id or "codeowners" in lower_title:
+                return "codeowners"
+            if "LIC" in item_id or "license" in lower_title:
+                return "license"
+            return "governance"
+
+        # Containers / IaC / Observability
+        if category in ("containerization", "containers", "container"):
+            return "container"
+        if category in ("iac", "infrastructure"):
+            return "iac"
+        if category in ("observability", "monitoring"):
+            return "observability"
+
+        return category or "unknown"
+
     def _attribute_item_id(
         self, file_path: str, selected_items: List[Dict[str, Any]]
     ) -> str:
@@ -131,38 +219,59 @@ class ExecutionPhase:
     # Recommendation helper
     # ------------------------------------------------------------------
     def _recommendation(
-        self, item_id: str, rationale: str, file_path: str = ""
+        self,
+        item_id: str,
+        subtype: str,
+        disposition: str,
+        rationale: str,
     ) -> Dict[str, Any]:
+        """Return a non-change workstream disposition for agent follow-up.
+
+        Disposition values:
+        - AGENT_ONLY: requires human/agent judgment; cannot be automated safely.
+        - PARTIAL: runtime can scaffold or document the fix, but completion
+          requires further work.
+        - NOT_PORTED: no automated handler exists for this subtype yet.
+        """
         return {
-            "file_path": file_path or f"RECOMMENDATION-{item_id}",
-            "change_type": "recommendation",
-            "rationale": rationale,
             "backlog_item_id": item_id,
+            "subtype": subtype,
+            "disposition": disposition,
+            "rationale": rationale,
         }
 
     # ------------------------------------------------------------------
     # Workstream handlers
     # ------------------------------------------------------------------
-    def _handle_bugs(self, item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _handle_bugs(
+        self, item: Dict[str, Any], subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         item_id = item.get("id", "")
-        return [
-            self._recommendation(
-                item_id,
-                "Automated bug remediation requires targeted acceptance criteria; "
-                "manual analysis and a dedicated fix plan are needed.",
-            )
-        ]
+        recommendation = self._recommendation(
+            item_id,
+            subtype,
+            "AGENT_ONLY",
+            "Automated bug remediation requires targeted acceptance criteria; "
+            "manual analysis and a dedicated fix plan are needed.",
+        )
+        return [], [recommendation]
 
-    def _handle_tests(self, item: Dict[str, Any], primary_lang: str) -> List[Dict[str, Any]]:
+    def _handle_tests(
+        self, item: Dict[str, Any], primary_lang: str, subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         item_id = item.get("id", "")
         changes: List[Dict[str, Any]] = []
+        recommendations: List[Dict[str, Any]] = []
         acceptance = item.get("acceptance_criteria", [])
 
         # Only emit a concrete test file when acceptance criteria contain
         # specific, automatable expectations. Generic framework criteria are
         # treated as configuration-only scaffolding.
         concrete = bool(acceptance) and any(
-            any(marker in criterion.lower() for marker in ("test_", "assert", "function", "module", "file:"))
+            any(
+                marker in criterion.lower()
+                for marker in ("test_", "assert", "function", "module", "file:")
+            )
             for criterion in acceptance
         )
 
@@ -188,42 +297,48 @@ class ExecutionPhase:
                 # Concrete criteria are present, but we still refuse to generate
                 # tautological placeholder tests. A recommendation is recorded
                 # until a human provides the specific assertions to automate.
-                changes.append(
+                recommendations.append(
                     self._recommendation(
                         item_id,
+                        subtype,
+                        "AGENT_ONLY",
                         "Concrete acceptance criteria detected, but automated "
                         "test generation requires explicit assertions to avoid "
                         "tautological placeholders.",
-                        "tests/",
                     )
                 )
             else:
-                changes.append(
+                recommendations.append(
                     self._recommendation(
                         item_id,
+                        subtype,
+                        "AGENT_ONLY",
                         "No concrete acceptance criteria available; test code "
                         "must be authored against explicit requirements.",
-                        "tests/",
                     )
                 )
         else:
-            changes.append(
+            recommendations.append(
                 self._recommendation(
                     item_id,
+                    subtype,
+                    "AGENT_ONLY",
                     f"Automated test scaffolding for '{primary_lang}' requires "
                     "concrete acceptance criteria to avoid tautological tests.",
                 )
             )
-        return changes
+        return changes, recommendations
 
-    def _handle_ci(self, item: Dict[str, Any], primary_lang: str) -> List[Dict[str, Any]]:
+    def _handle_ci(
+        self, item: Dict[str, Any], primary_lang: str, subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         item_id = item.get("id", "")
         changes: List[Dict[str, Any]] = []
         wf_dir = self.target_dir / ".github" / "workflows"
         wf_dir.mkdir(exist_ok=True, parents=True)
         ci_path = wf_dir / "ci.yml"
         if ci_path.exists():
-            return changes
+            return changes, []
 
         lang = (primary_lang or "unknown").lower()
         if lang in ("javascript", "typescript"):
@@ -290,19 +405,19 @@ jobs:
                 "backlog_item_id": item_id,
             }
         )
-        return changes
+        return changes, []
 
-    def _handle_docs(self, item: Dict[str, Any], meta: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _handle_readme(
+        self, item: Dict[str, Any], meta: Dict[str, Any], subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         item_id = item.get("id", "")
-        title = item.get("title", "")
         changes: List[Dict[str, Any]] = []
         repo_name = meta.get("name", "Project")
         repo_type = meta.get("repo_type", "Application")
 
-        if "README" in item_id or "README" in title or item_id == "DOCS-001":
-            readme_path = self.target_dir / "README.md"
-            if not readme_path.exists():
-                content = f"""# {repo_name}
+        readme_path = self.target_dir / "README.md"
+        if not readme_path.exists():
+            content = f"""# {repo_name}
 
 {repo_type.title()} codebase.
 
@@ -318,20 +433,25 @@ Run tests locally prior to submitting pull requests.
 ## License
 Refer to the [LICENSE](LICENSE) file for distribution terms.
 """
-                readme_path.write_text(content, encoding="utf-8")
-                changes.append(
-                    {
-                        "file_path": "README.md",
-                        "change_type": "create",
-                        "rationale": "Generated standardized README documentation",
-                        "backlog_item_id": item_id,
-                    }
-                )
+            readme_path.write_text(content, encoding="utf-8")
+            changes.append(
+                {
+                    "file_path": "README.md",
+                    "change_type": "create",
+                    "rationale": "Generated standardized README documentation",
+                    "backlog_item_id": item_id,
+                }
+            )
+        return changes, []
 
-        if "CONTRIBUTING" in item_id or "CONTRIBUTING" in title or item_id == "DOCS-002":
-            contrib_path = self.target_dir / "CONTRIBUTING.md"
-            if not contrib_path.exists():
-                content = """# Contributing Guidelines
+    def _handle_contributing(
+        self, item: Dict[str, Any], subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        item_id = item.get("id", "")
+        changes: List[Dict[str, Any]] = []
+        contrib_path = self.target_dir / "CONTRIBUTING.md"
+        if not contrib_path.exists():
+            content = """# Contributing Guidelines
 
 Thank you for contributing!
 
@@ -340,78 +460,83 @@ Thank you for contributing!
 2. Follow Conventional Commits format (`feat:`, `fix:`, `docs:`, `chore:`).
 3. Update documentation for any user-facing changes.
 """
-                contrib_path.write_text(content, encoding="utf-8")
-                changes.append(
-                    {
-                        "file_path": "CONTRIBUTING.md",
-                        "change_type": "create",
-                        "rationale": "Added contributor guidelines",
-                        "backlog_item_id": item_id,
-                    }
-                )
-        return changes
+            contrib_path.write_text(content, encoding="utf-8")
+            changes.append(
+                {
+                    "file_path": "CONTRIBUTING.md",
+                    "change_type": "create",
+                    "rationale": "Added contributor guidelines",
+                    "backlog_item_id": item_id,
+                }
+            )
+        return changes, []
 
-    def _handle_governance(self, item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _handle_codeowners(
+        self, item: Dict[str, Any], subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         item_id = item.get("id", "")
-        title = item.get("title", "")
         changes: List[Dict[str, Any]] = []
 
-        if "CODEOWNERS" in item_id or "CODEOWNERS" in title or item_id == "GOV-001":
-            codeowners_path = self.target_dir / ".github" / "CODEOWNERS"
-            if not codeowners_path.exists() and not (self.target_dir / "CODEOWNERS").exists():
-                codeowners_path.parent.mkdir(parents=True, exist_ok=True)
-                content = """# CODEOWNERS
+        codeowners_path = self.target_dir / ".github" / "CODEOWNERS"
+        if not codeowners_path.exists() and not (self.target_dir / "CODEOWNERS").exists():
+            codeowners_path.parent.mkdir(parents=True, exist_ok=True)
+            content = """# CODEOWNERS
 # Replace the examples below with real GitHub usernames or team names.
 # See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 # * @owner
 # src/ @team-frontend
 # docs/ @team-docs
 """
-                codeowners_path.write_text(content, encoding="utf-8")
+            codeowners_path.write_text(content, encoding="utf-8")
+            changes.append(
+                {
+                    "file_path": ".github/CODEOWNERS",
+                    "change_type": "create",
+                    "rationale": "Created CODEOWNERS file with instructions for real identities",
+                    "backlog_item_id": item_id,
+                }
+            )
+        return changes, []
+
+    def _handle_license(
+        self, item: Dict[str, Any], subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        item_id = item.get("id", "")
+        changes: List[Dict[str, Any]] = []
+        recommendations: List[Dict[str, Any]] = []
+
+        lic_path = self.target_dir / "LICENSE"
+        if not lic_path.exists():
+            template_path = self.state_manager.paths.get_skill_path(
+                "templates", "LICENSE-APACHE-2.0.txt"
+            )
+            if template_path.exists():
+                lic_path.write_text(
+                    template_path.read_text(encoding="utf-8"), encoding="utf-8"
+                )
                 changes.append(
                     {
-                        "file_path": ".github/CODEOWNERS",
+                        "file_path": "LICENSE",
                         "change_type": "create",
-                        "rationale": "Created CODEOWNERS file with instructions for real identities",
+                        "rationale": "Installed complete Apache-2.0 license text",
                         "backlog_item_id": item_id,
                     }
                 )
-
-        if (
-            "LIC" in item_id
-            or "License" in title
-            or item_id == "GOV-002"
-            or (item.get("category") == "governance" and "license" in title.lower())
-        ):
-            lic_path = self.target_dir / "LICENSE"
-            if not lic_path.exists():
-                template_path = self.state_manager.paths.get_skill_path(
-                    "templates", "LICENSE-APACHE-2.0.txt"
+            else:
+                recommendations.append(
+                    self._recommendation(
+                        item_id,
+                        subtype,
+                        "AGENT_ONLY",
+                        "No bundled full Apache-2.0 license text found; "
+                        "explicit license selection is required before committing a LICENSE file.",
+                    )
                 )
-                if template_path.exists():
-                    lic_path.write_text(
-                        template_path.read_text(encoding="utf-8"), encoding="utf-8"
-                    )
-                    changes.append(
-                        {
-                            "file_path": "LICENSE",
-                            "change_type": "create",
-                            "rationale": "Installed complete Apache-2.0 license text",
-                            "backlog_item_id": item_id,
-                        }
-                    )
-                else:
-                    changes.append(
-                        self._recommendation(
-                            item_id,
-                            "No bundled full Apache-2.0 license text found; "
-                            "explicit license selection is required before committing a LICENSE file.",
-                            "LICENSE",
-                        )
-                    )
-        return changes
+        return changes, recommendations
 
-    def _handle_security(self, item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _handle_security_policy(
+        self, item: Dict[str, Any], subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         item_id = item.get("id", "")
         changes: List[Dict[str, Any]] = []
         sec_path = self.target_dir / "SECURITY.md"
@@ -439,31 +564,233 @@ public issue for security-sensitive findings.
                     "backlog_item_id": item_id,
                 }
             )
-        return changes
+        return changes, []
+
+    def _handle_secret_exposure(
+        self, item: Dict[str, Any], subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        item_id = item.get("id", "")
+        return [], [
+            self._recommendation(
+                item_id,
+                subtype,
+                "AGENT_ONLY",
+                "Exposed secrets require manual verification, credential rotation, "
+                "and git-history cleanup before any automated change can be applied.",
+            )
+        ]
+
+    def _handle_lockfile(
+        self, item: Dict[str, Any], subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        item_id = item.get("id", "")
+        return [], [
+            self._recommendation(
+                item_id,
+                subtype,
+                "PARTIAL",
+                "Lockfile generation is environment-specific; run the appropriate "
+                "package manager (npm install, poetry lock, cargo generate-lockfile, etc.) "
+                "and commit the resulting lockfile.",
+            )
+        ]
+
+    def _handle_linter(
+        self, item: Dict[str, Any], primary_lang: str, subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        item_id = item.get("id", "")
+        changes: List[Dict[str, Any]] = []
+        lang = (primary_lang or "unknown").lower()
+
+        if lang in ("javascript", "typescript"):
+            eslint_path = self.target_dir / ".eslintrc.json"
+            if not eslint_path.exists():
+                eslint_path.write_text(
+                    json.dumps(
+                        {
+                            "env": {"browser": True, "es2021": True, "node": True},
+                            "extends": "eslint:recommended",
+                            "parserOptions": {"ecmaVersion": "latest"},
+                            "rules": {},
+                        },
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                changes.append(
+                    {
+                        "file_path": ".eslintrc.json",
+                        "change_type": "create",
+                        "rationale": "Generated baseline ESLint configuration",
+                        "backlog_item_id": item_id,
+                    }
+                )
+        elif lang == "python":
+            ruff_path = self.target_dir / "ruff.toml"
+            if not ruff_path.exists() and not (self.target_dir / "pyproject.toml").exists():
+                ruff_path.write_text(
+                    "[lint]\nselect = ['E', 'F', 'I']\nignore = []\n",
+                    encoding="utf-8",
+                )
+                changes.append(
+                    {
+                        "file_path": "ruff.toml",
+                        "change_type": "create",
+                        "rationale": "Generated baseline ruff linter configuration",
+                        "backlog_item_id": item_id,
+                    }
+                )
+        return changes, []
+
+    def _handle_type_checker(
+        self, item: Dict[str, Any], primary_lang: str, subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        item_id = item.get("id", "")
+        changes: List[Dict[str, Any]] = []
+        lang = (primary_lang or "unknown").lower()
+
+        if lang == "typescript":
+            tsconfig_path = self.target_dir / "tsconfig.json"
+            if not tsconfig_path.exists():
+                tsconfig_path.write_text(
+                    json.dumps(
+                        {
+                            "compilerOptions": {
+                                "target": "ES2020",
+                                "module": "commonjs",
+                                "strict": True,
+                                "esModuleInterop": True,
+                                "skipLibCheck": True,
+                                "forceConsistentCasingInFileNames": True,
+                            },
+                            "include": ["src/**/*"],
+                        },
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                changes.append(
+                    {
+                        "file_path": "tsconfig.json",
+                        "change_type": "create",
+                        "rationale": "Generated baseline TypeScript compiler configuration",
+                        "backlog_item_id": item_id,
+                    }
+                )
+        elif lang == "python":
+            mypy_path = self.target_dir / "mypy.ini"
+            if not mypy_path.exists():
+                mypy_path.write_text(
+                    "[mypy]\npython_version = 3.11\nwarn_return_any = True\nwarn_unused_configs = True\n",
+                    encoding="utf-8",
+                )
+                changes.append(
+                    {
+                        "file_path": "mypy.ini",
+                        "change_type": "create",
+                        "rationale": "Generated baseline mypy configuration",
+                        "backlog_item_id": item_id,
+                    }
+                )
+        return changes, []
+
+    def _handle_container(
+        self, item: Dict[str, Any], subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        item_id = item.get("id", "")
+        return [], [
+            self._recommendation(
+                item_id,
+                subtype,
+                "NOT_PORTED",
+                "Container and Dockerfile generation is not ported to the deterministic runtime; "
+                "author manually or extend the runtime with a container workstream handler.",
+            )
+        ]
+
+    def _handle_iac(
+        self, item: Dict[str, Any], subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        item_id = item.get("id", "")
+        return [], [
+            self._recommendation(
+                item_id,
+                subtype,
+                "NOT_PORTED",
+                "Infrastructure-as-Code generation is not ported to the deterministic runtime; "
+                "author manually or extend the runtime with an IaC workstream handler.",
+            )
+        ]
+
+    def _handle_observability(
+        self, item: Dict[str, Any], subtype: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        item_id = item.get("id", "")
+        return [], [
+            self._recommendation(
+                item_id,
+                subtype,
+                "NOT_PORTED",
+                "Observability configuration generation is not ported to the deterministic runtime; "
+                "author manually or extend the runtime with an observability workstream handler.",
+            )
+        ]
 
     def _execute_workstream_item(
         self, item: Dict[str, Any], discovery_data: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
-        """Implement remediation for a specific backlog item."""
-        item_id = item.get("id", "")
-        category = item.get("category", "")
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Implement remediation for a specific backlog item.
+
+        Returns a tuple of (file_changes, recommendations) so that guidance,
+        partial work, and not-yet-ported subtypes are recorded without being
+        treated as repository changes.
+        """
+        subtype = self._item_subtype(item)
         meta = discovery_data.get("repo_metadata", {})
         primary_lang = meta.get("primary_language", "python")
 
-        if category == "bugs" or item_id.startswith("BUG"):
-            return self._handle_bugs(item)
-        if category == "tests" or item_id.startswith("TEST"):
-            return self._handle_tests(item, primary_lang)
-        if category == "ci" or item_id.startswith("CI"):
-            return self._handle_ci(item, primary_lang)
-        if category == "docs" or item_id.startswith("DOCS"):
-            return self._handle_docs(item, meta)
-        if category == "governance" or item_id.startswith("GOV"):
-            return self._handle_governance(item)
-        if category == "security" or item_id.startswith("SEC"):
-            return self._handle_security(item)
+        if subtype == "bug":
+            return self._handle_bugs(item, subtype)
+        if subtype == "test_framework":
+            return self._handle_tests(item, primary_lang, subtype)
+        if subtype == "linter":
+            return self._handle_linter(item, primary_lang, subtype)
+        if subtype == "type_checker":
+            return self._handle_type_checker(item, primary_lang, subtype)
+        if subtype == "secret_exposure":
+            return self._handle_secret_exposure(item, subtype)
+        if subtype == "security_policy":
+            return self._handle_security_policy(item, subtype)
+        if subtype == "lockfile":
+            return self._handle_lockfile(item, subtype)
+        if subtype == "ci":
+            return self._handle_ci(item, primary_lang, subtype)
+        if subtype == "readme":
+            return self._handle_readme(item, meta, subtype)
+        if subtype == "contributing":
+            return self._handle_contributing(item, subtype)
+        if subtype == "codeowners":
+            return self._handle_codeowners(item, subtype)
+        if subtype == "license":
+            return self._handle_license(item, subtype)
+        if subtype == "container":
+            return self._handle_container(item, subtype)
+        if subtype == "iac":
+            return self._handle_iac(item, subtype)
+        if subtype == "observability":
+            return self._handle_observability(item, subtype)
 
-        return []
+        item_id = item.get("id", "")
+        return [], [
+            self._recommendation(
+                item_id,
+                subtype,
+                "NOT_PORTED",
+                f"No deterministic handler available for subtype '{subtype}'.",
+            )
+        ]
 
     # ------------------------------------------------------------------
     # Local verification
@@ -652,6 +979,10 @@ public issue for security-sensitive findings.
         selected_ids = set(plan_data.get("selected_items", []))
         selected_items = [item for item in backlog if item.get("id") in selected_ids]
         execution_order = plan_data.get("execution_order", list(selected_ids))
+        constraints = plan_data.get("constraints", {})
+        max_files = constraints.get("max_files", 20)
+        risk_tolerance = constraints.get("risk_tolerance", "medium")
+        tolerance_rank = RISK_RANK.get(risk_tolerance, 1)
 
         order_index = {item_id: idx for idx, item_id in enumerate(execution_order)}
         ordered_items = sorted(
@@ -663,9 +994,44 @@ public issue for security-sensitive findings.
         baseline_paths = self._baseline_paths()
 
         changes: List[Dict[str, Any]] = []
+        recommendations: List[Dict[str, Any]] = []
+        changed_files: Set[str] = set()
         for item in ordered_items:
-            item_changes = self._execute_workstream_item(item, discovery_data)
-            changes.extend(item_changes)
+            item_id = item.get("id", "")
+            subtype = self._item_subtype(item)
+            item_risk_rank = RISK_RANK.get(item.get("risk", "low"), 0)
+            if item_risk_rank > tolerance_rank:
+                recommendations.append(
+                    self._recommendation(
+                        item_id,
+                        subtype,
+                        "AGENT_ONLY",
+                        f"Item risk '{item.get('risk')}' exceeds run tolerance '{risk_tolerance}'; "
+                        "manual review required before applying changes.",
+                    )
+                )
+                continue
+            if len(changed_files) >= max_files:
+                recommendations.append(
+                    self._recommendation(
+                        item_id,
+                        subtype,
+                        "AGENT_ONLY",
+                        f"Skipped because max-files limit ({max_files}) has been reached.",
+                    )
+                )
+                continue
+            item_changes, item_recommendations = self._execute_workstream_item(
+                item, discovery_data
+            )
+            recommendations.extend(item_recommendations)
+            for change in item_changes:
+                file_path = change.get("file_path")
+                if file_path and len(changed_files) >= max_files:
+                    continue
+                changes.append(change)
+                if file_path:
+                    changed_files.add(file_path)
 
         # RUP-EXEC-003: per-item local verification after changes are applied.
         tools = self.tool_detector.detect_all()
@@ -684,6 +1050,8 @@ public issue for security-sensitive findings.
                 continue
             if path.startswith(".rup") or path.startswith("RUP_"):
                 continue
+            if len(changed_files) >= max_files:
+                break
 
             change: Dict[str, Any] = {
                 "file_path": path,
@@ -694,6 +1062,7 @@ public issue for security-sensitive findings.
             if old_path:
                 change["old_path"] = old_path
             changes.append(change)
+            changed_files.add(path)
 
         # Extract recent commits.
         commits: List[Dict[str, Any]] = []
@@ -724,6 +1093,7 @@ public issue for security-sensitive findings.
 
         execution_data: Dict[str, Any] = {
             "changes": changes,
+            "recommendations": recommendations,
             "commits": commits,
             "local_verification": local_verification,
             "rollback_procedure": rollback_procedure,

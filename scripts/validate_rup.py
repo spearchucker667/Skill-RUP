@@ -131,6 +131,62 @@ def load_schema(schema_path: Optional[Path] = None) -> Dict[str, Any]:
     raise FileNotFoundError(f"Schema not found. Searched: {[str(c) for c in candidates]}")
 
 
+def _resolve_schemas_dir(schema_path: Optional[Path] = None) -> Optional[Path]:
+    """Locate the derived-schemas directory relative to the canonical schema.
+
+    The canonical layout places ``protocol/rup-schema.json`` at the repository
+    root, with a sibling ``schemas/`` directory containing derived artifact
+    schemas (run-manifest, session-state, final-report, rollback, handoff, etc.).
+    """
+    if schema_path is None:
+        return None
+    repo_root = Path(schema_path).parent.parent.resolve()
+    schemas_dir = repo_root / "schemas"
+    if schemas_dir.is_dir():
+        return schemas_dir
+    return None
+
+
+def _load_derived_schemas(schemas_dir: Path) -> Dict[str, Dict[str, Any]]:
+    """Load all ``*.schema.json`` files from the derived schemas directory."""
+    derived: Dict[str, Dict[str, Any]] = {}
+    if not schemas_dir.is_dir():
+        return derived
+    for schema_file in schemas_dir.glob("*.schema.json"):
+        try:
+            _check_file_size(schema_file)
+            with open(schema_file, "r", encoding="utf-8") as f:
+                derived[schema_file.stem] = json.load(f)
+        except Exception as e:
+            print(
+                f"{colorize('Warning:', Colors.YELLOW)} Could not load derived schema {schema_file}: {e}"
+            )
+    return derived
+
+
+def _validate_json_schema(schema_data: Dict[str, Any]) -> Tuple[bool, List[ValidationError]]:
+    """Meta-validate a JSON Schema document against Draft 2020-12."""
+    try:
+        Draft202012Validator.check_schema(schema_data)
+        return True, []
+    except ValidationError as e:
+        return False, [e]
+
+
+def _validate_derived(
+    instance_data: Dict[str, Any],
+    schema_name: str,
+    derived_schemas: Dict[str, Dict[str, Any]],
+) -> Tuple[bool, List[ValidationError]]:
+    """Validate an instance against a derived schema by name."""
+    schema = derived_schemas.get(schema_name)
+    if schema is None:
+        raise ValueError(f"Derived schema not found: {schema_name}")
+    validator = Draft202012Validator(schema)
+    errors = list(validator.iter_errors(instance_data))
+    return len(errors) == 0, errors
+
+
 def load_yaml(file_path: Path) -> Dict[str, Any]:
     """Load a YAML file."""
     _check_file_size(file_path)
@@ -319,23 +375,45 @@ def cmd_validate_output(args: argparse.Namespace) -> int:
         return 1
 
 
+def _derived_schema_name(fname_lower: str) -> Optional[str]:
+    """Map a JSON artifact filename to its derived schema name, if known."""
+    exact_map = {
+        "run-manifest.json": "run-manifest",
+        "session-state.json": "session-state",
+        "rup_final_report.json": "final-report",
+    }
+    if fname_lower in exact_map:
+        return exact_map[fname_lower]
+    if "rollback" in fname_lower and fname_lower.endswith(".json"):
+        return "rollback"
+    if "handoff" in fname_lower and fname_lower.endswith(".json"):
+        return "handoff"
+    return None
+
+
 def cmd_validate_all(args: argparse.Namespace) -> int:
-    """Validate all protocol and output files in a directory."""
+    """Validate all protocol, output, and derived-schema artifacts in a directory."""
     directory = Path(args.directory)
     if not directory.is_dir():
         print(f"{colorize('Error:', Colors.RED)} Not a directory: {directory}")
         return 1
-    
+
     try:
         schema = load_schema(args.schema)
     except FileNotFoundError as e:
         print(f"{colorize('Error:', Colors.RED)} {e}")
         return 1
-    
+
+    schemas_dir = _resolve_schemas_dir(args.schema)
+    derived_schemas: Dict[str, Dict[str, Any]] = {}
+    if schemas_dir is not None:
+        derived_schemas = _load_derived_schemas(schemas_dir)
+
     results = []
-    parse_errors = 0  # Track files that failed to parse
+    parse_errors = 0  # Track files that failed to parse or load
     seen_files = set()
-    ignored_parts = {".reference", "schemas", "development", "legacy", ".git", ".venv", "node_modules"}
+    # Note: ``schemas`` and ``development`` are intentionally no longer ignored.
+    ignored_parts = {".reference", "legacy", ".git", ".venv", "node_modules"}
 
     # Walk directory to find matching files case-insensitively
     for file_path in directory.rglob("*"):
@@ -350,6 +428,18 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
 
         fname_lower = file_path.name.lower()
 
+        # Meta-validate derived JSON Schema files
+        if fname_lower.endswith(".schema.json"):
+            seen_files.add(resolved_str)
+            try:
+                schema_data = load_json(file_path)
+                valid, errors = _validate_json_schema(schema_data)
+                results.append((file_path, valid, errors))
+            except Exception as e:
+                print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {file_path}: {e}")
+                parse_errors += 1
+            continue
+
         # Validate protocol files
         if fname_lower.endswith((".yaml", ".yml")) and "protocol" in fname_lower:
             seen_files.add(resolved_str)
@@ -360,9 +450,10 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
             except Exception as e:
                 print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {file_path}: {e}")
                 parse_errors += 1
+            continue
 
         # Validate output JSON files
-        elif fname_lower.endswith(".json"):
+        if fname_lower.endswith(".json"):
             output_type = None
             if "discovery" in fname_lower:
                 output_type = "discovery"
@@ -382,7 +473,29 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
                 except Exception as e:
                     print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {file_path}: {e}")
                     parse_errors += 1
-    
+                continue
+
+            # Validate derived artifacts (run-manifest, session-state,
+            # final-report, rollback, handoff) against schemas/*.schema.json.
+            derived_name = _derived_schema_name(fname_lower)
+            if derived_name and derived_name in derived_schemas:
+                seen_files.add(resolved_str)
+                try:
+                    output = load_json(file_path)
+                    valid, errors = _validate_derived(output, derived_name, derived_schemas)
+                    results.append((file_path, valid, errors))
+                except Exception as e:
+                    print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {file_path}: {e}")
+                    parse_errors += 1
+                continue
+
+            if derived_name and derived_name not in derived_schemas:
+                print(
+                    f"{colorize('Warning:', Colors.YELLOW)} "
+                    f"Derived schema missing for {file_path} (expected {derived_name}.schema.json)"
+                )
+                parse_errors += 1
+
     # Print results
     if not results:
         msg = f"FAIL/EMPTY — No expected RUP artifacts discovered in {directory}"
@@ -394,27 +507,27 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
             print(f"{colorize('Note:', Colors.YELLOW)} --allow-empty enabled; treating empty scan as success.")
             return 0
         return 1
-    
+
     print(f"\n{colorize('Validation Results', Colors.BOLD)}")
     print("=" * 50)
-    
+
     total_valid = 0
     total_invalid = 0
-    
+
     for file_path, valid, errors in results:
         print_result(file_path, valid, errors, args.verbose)
         if valid:
             total_valid += 1
         else:
             total_invalid += 1
-    
+
     print("=" * 50)
     print(f"Total: {total_valid + total_invalid} files")
     print(f"  {colorize(CHECK, Colors.GREEN)} Valid: {total_valid}")
     print(f"  {colorize(CROSS, Colors.RED)} Invalid: {total_invalid}")
     if parse_errors > 0:
         print(f"  {colorize(WARN, Colors.YELLOW)} Parse errors: {parse_errors}")
-    
+
     return 0 if (total_invalid == 0 and parse_errors == 0) else 1
 
 

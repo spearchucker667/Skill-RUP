@@ -4,12 +4,14 @@ Renders clean, GitHub-flavored Markdown matching canonical RUP Protocol v3.0.0 t
 """
 import json
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from .paths import RupPaths
+from .state import StateManager
 
 class ArtifactBuilder:
-    def __init__(self, paths: RupPaths):
+    def __init__(self, paths: RupPaths, state: Optional[StateManager] = None):
         self.paths = paths
+        self.state = state
 
     def build_markdown(self, template_name: str, data: Dict[str, Any], output_filename: str) -> Path:
         """Render deterministic Markdown based on phase data."""
@@ -29,6 +31,9 @@ class ArtifactBuilder:
         out_path = self.paths.get_state_path(output_filename)
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(content)
+
+        if self.state is not None:
+            self.state._record_artifact(output_filename)
 
         return out_path
 
