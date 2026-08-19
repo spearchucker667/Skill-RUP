@@ -1226,3 +1226,45 @@ None.
 
 ### Next Actions
 - Continue monitoring GitHub Actions for the refactored CI topology, release workflow syntax, and Windows forward-test job.
+
+---
+
+## 2026-08-19 - Maintenance: Merge open dependabot PRs and delete feature branches
+
+**Agent**: Kimi Code CLI
+**Task**: Merge all open pull requests into `main` and delete their head branches to leave a single clean `main` branch.
+
+### Accomplishments
+- Merged PR #4 (`dependabot/github_actions/softprops/action-gh-release-3`) — bumps `softprops/action-gh-release` from 2.6.2 to 3.0.2.
+- Merged PR #2 (`dependabot/github_actions/actions/setup-python-7`) — bumps `actions/setup-python` from 5.6.0 to 7.0.0.
+- Merged PR #1 (`dependabot/github_actions/actions/checkout-7`) — bumps `actions/checkout` from 4.4.0 to 7.0.1.
+- Deleted all three dependabot head branches.
+- Pulled the updated `main` locally.
+
+### Files Changed
+- `.github/workflows/ci.yml`
+- `.github/workflows/forward-tests.yml`
+- `.github/workflows/release-package.yml`
+- `.github/workflows/security-scan.yml`
+- `.github/workflows/validate-skill.yml`
+- `docs/development/summary_of_work.md` (this entry)
+
+### Validation Results
+- `python -m pytest tests/ -q` — **144 passed**.
+- `python scripts/forward_test.py --fixtures tests/fixtures` — **10/10 passed**.
+- `python scripts/generate_schemas_templates.py --check` — PASS.
+- `python scripts/generate_workflows.py --check` — PASS.
+- `python scripts/build_capability_map.py --check` — PASS.
+- `python scripts/audit_sources.py --check` — **63/63 passed**.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` — 20/20 valid.
+- `bandit -r runtime scripts -c bandit.yaml` — no issues.
+
+### Push
+- Merged PRs via `gh pr merge --squash --delete-branch --admin`.
+- Pulled updated `main` to local workspace.
+
+### Unresolved Blockers
+None.
+
+### Next Actions
+- Monitor GitHub Actions on the merged `main` to confirm the dependabot action-version bumps do not break the refactored CI topology.
