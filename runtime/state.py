@@ -59,9 +59,35 @@ def _compute_sha256(file_path: Path) -> str:
 class StateManager:
     def __init__(self, paths: RupPaths, run_id: Optional[str] = None):
         self.paths = paths
-        self.run_id = run_id or RunManifest.generate_run_id(str(paths.target_dir))
+        self.run_id = run_id or self._recover_run_id() or self._generate_run_id()
         self._session_state: Optional[SessionState] = None
         self._artifact_ledger: List[Dict[str, Any]] = []
+
+    def _recover_run_id(self) -> Optional[str]:
+        """Reuse the run_id from an existing session-state.json when available."""
+        try:
+            session = self.load_json("session-state.json")
+            if isinstance(session, dict) and session.get("run_id"):
+                return session["run_id"]
+        except Exception:
+            pass
+        return None
+
+    def _generate_run_id(self) -> str:
+        """Generate a run ID using target commit and existing constraints if known."""
+        target_commit = self._get_target_commit()
+        constraints = {}
+        try:
+            plan = self.load_json("RUP_PLAN.json")
+            if plan and "constraints" in plan:
+                constraints = plan["constraints"]
+        except Exception:
+            pass
+        return RunManifest.generate_run_id(
+            str(self.paths.target_dir),
+            target_git_commit=target_commit,
+            constraints=constraints,
+        )
 
     def _get_artifact_path(self, filename: str) -> Path:
         """Get the secure path for an artifact, placing state in .rup/ state directory."""

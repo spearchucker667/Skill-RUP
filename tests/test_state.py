@@ -169,13 +169,14 @@ def test_state_trust_boundary(tmp_path):
     assert state.load_json("RUP_DISCOVERY.json") == {"phase": "discovery"}
 
 
-def test_run_id_is_deterministic_for_same_target(tmp_path):
-    """RUP-STATE-001: run IDs for the same target must be deterministic."""
+def test_run_id_is_unique_per_invocation(tmp_path):
+    """RUP-STATE-001: run IDs must be unique for each StateManager invocation."""
     paths = RupPaths(tmp_path)
     state_a = StateManager(paths)
     state_b = StateManager(paths)
-    assert state_a.run_id == state_b.run_id
+    assert state_a.run_id != state_b.run_id
     assert state_a.run_id.startswith("rup-")
+    assert state_b.run_id.startswith("rup-")
 
 
 def test_run_id_differs_for_different_targets(tmp_path):

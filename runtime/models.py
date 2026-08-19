@@ -4,6 +4,7 @@ Data models and type definitions for RUP deterministic runtime.
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Any, Optional
 import hashlib
+import secrets
 import datetime
 
 @dataclass
@@ -98,16 +99,24 @@ class RunManifest:
     verification_status: str = "pending"
 
     @staticmethod
-    def generate_run_id(target_path: str = "") -> str:
-        """Generate a deterministic run ID from canonical constants and the target path.
+    def generate_run_id(
+        target_path: str = "",
+        target_git_commit: str = "",
+        constraints: Dict[str, Any] | None = None,
+    ) -> str:
+        """Generate a unique run ID from canonical and invocation-specific inputs.
 
-        The result is stable for the same target path, satisfying the deterministic
-        run-ID contract in SKILL.md.
+        Includes the target path and git commit, run constraints, canonical
+        constants, and an invocation nonce so that repeated runs against the
+        same repository receive distinct run IDs.
         """
         canonical = (
             f"{RunManifest.protocol_version}:"
             f"{RunManifest.canonical_commit}:"
-            f"{target_path}"
+            f"{target_git_commit}:"
+            f"{constraints or {}}:"
+            f"{target_path}:"
+            f"{secrets.token_hex(8)}"
         )
         digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
         return f"rup-{digest}"
