@@ -965,3 +965,41 @@ None.
 
 ### Next Actions
 - Monitor GitHub Actions for the new `main` commit to confirm all workflows complete green.
+
+---
+
+## 2026-08-19 - Session: Windows Path Separator & Provenance Fixture Fixes
+
+**Agent**: Kimi Code CLI
+**Task**: Fix CI failures caused by missing example files in provenance test fixtures and Windows backslash path separators in validator output.
+
+### Accomplishments
+- Added missing upstream example files to the `upstream_repo` and `skill_root` fixtures in `tests/test_provenance.py`:
+  - `examples/execution_output.json`
+  - `examples/mock_scenario_summary.json`
+- Updated `test_enumerate_git_tree_returns_sorted_blob_entries` to expect the two new fixture files.
+- Added `_display_path()` helper in `scripts/validate_rup.py` to normalize printed paths to forward slashes on all platforms.
+- Replaced raw `str(file_path)` usage in validator output and warning/error messages with `_display_path(file_path)`.
+
+### Files Changed
+- `tests/test_provenance.py`
+- `scripts/validate_rup.py`
+- `docs/development/summary_of_work.md` (this entry)
+
+### Validation Results
+- `python -m compileall runtime scripts` — pass.
+- `python -m pytest tests/ -q` — **110 passed, 10 warnings**.
+- `python scripts/forward_test.py --fixtures tests/fixtures` — **Passed: 10/10**.
+- `bandit -r runtime scripts -c bandit.yaml` — no issues.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` — **18 valid, 0 invalid**.
+- `python scripts/build_capability_map.py --check` — **PASS**.
+- `python scripts/audit_sources.py --check` — **Transfer verification: 12/12 passed**.
+
+### Push
+- Committed and pushed to `main`.
+
+### Unresolved Blockers
+None.
+
+### Next Actions
+- Monitor GitHub Actions for the Windows job to confirm the path-separator fix resolves the validator tests.

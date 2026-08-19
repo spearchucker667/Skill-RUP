@@ -73,6 +73,11 @@ def _check_file_size(file_path: Path) -> None:
         )
 
 
+def _display_path(path: Path) -> str:
+    """Return a display string for a path using forward slashes on all platforms."""
+    return str(path).replace("\\", "/")
+
+
 # ANSI color codes
 class Colors:
     RED = '\033[91m'
@@ -357,10 +362,11 @@ def print_result(
     verbose: bool = False
 ) -> None:
     """Print validation result."""
+    display = _display_path(file_path)
     if valid:
-        print(f"{colorize(CHECK, Colors.GREEN)} {colorize(str(file_path), Colors.BOLD)}: {colorize('Valid', Colors.GREEN)}")
+        print(f"{colorize(CHECK, Colors.GREEN)} {colorize(display, Colors.BOLD)}: {colorize('Valid', Colors.GREEN)}")
     else:
-        print(f"{colorize(CROSS, Colors.RED)} {colorize(str(file_path), Colors.BOLD)}: {colorize('Invalid', Colors.RED)}")
+        print(f"{colorize(CROSS, Colors.RED)} {colorize(display, Colors.BOLD)}: {colorize('Invalid', Colors.RED)}")
         print(f"  Found {len(errors)} error(s):")
         
         # Show first 10 errors by default, all if verbose
@@ -484,7 +490,7 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
                 valid, errors = _validate_json_schema(schema_data)
                 results.append((file_path, valid, errors))
             except Exception as e:
-                print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {file_path}: {e}")
+                print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {_display_path(file_path)}: {e}")
                 parse_errors += 1
             continue
 
@@ -496,7 +502,7 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
                 valid, errors = validate_protocol(protocol, schema)
                 results.append((file_path, valid, errors))
             except Exception as e:
-                print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {file_path}: {e}")
+                print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {_display_path(file_path)}: {e}")
                 parse_errors += 1
             continue
 
@@ -521,7 +527,7 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
                     )
                     results.append((file_path, valid, errors))
                 except Exception as e:
-                    print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {file_path}: {e}")
+                    print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {_display_path(file_path)}: {e}")
                     parse_errors += 1
                 continue
 
@@ -535,20 +541,20 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
                     valid, errors = _validate_derived(output, derived_name, derived_schemas)
                     results.append((file_path, valid, errors))
                 except Exception as e:
-                    print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {file_path}: {e}")
+                    print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {_display_path(file_path)}: {e}")
                     parse_errors += 1
                 continue
 
             if derived_name and derived_name not in derived_schemas:
                 print(
                     f"{colorize('Warning:', Colors.YELLOW)} "
-                    f"Derived schema missing for {file_path} (expected {derived_name}.schema.json)"
+                    f"Derived schema missing for {_display_path(file_path)} (expected {derived_name}.schema.json)"
                 )
                 parse_errors += 1
 
     # Print results
     if not results:
-        msg = f"FAIL/EMPTY — No expected RUP artifacts discovered in {directory}"
+        msg = f"FAIL/EMPTY — No expected RUP artifacts discovered in {_display_path(directory)}"
         print(f"{colorize(CROSS, Colors.RED)} {colorize(msg, Colors.BOLD)}")
         if parse_errors > 0:
             print(f"  {colorize(WARN, Colors.YELLOW)} Parse errors: {parse_errors}")

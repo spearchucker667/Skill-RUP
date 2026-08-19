@@ -63,6 +63,8 @@ def upstream_repo(tmp_path: Path):
         "rup-schema.json": '{"$schema": "test"}\n',
         "legacy/README.md": "# Legacy\n",
         "examples/discovery_output.json": "{}\n",
+        "examples/execution_output.json": "{}\n",
+        "examples/mock_scenario_summary.json": "{}\n",
         "examples/verification_output.json": "{}\n",
         "foreign/boilerplate.md": "# Foreign\n",
     }
@@ -87,6 +89,12 @@ def skill_root(tmp_path: Path, upstream_repo: Path):
     (skill / "examples").mkdir(parents=True, exist_ok=True)
     (skill / "examples" / "discovery_output.json").write_bytes(
         (upstream_repo / "examples" / "discovery_output.json").read_bytes()
+    )
+    (skill / "examples" / "execution_output.json").write_bytes(
+        (upstream_repo / "examples" / "execution_output.json").read_bytes()
+    )
+    (skill / "examples" / "mock_scenario_summary.json").write_bytes(
+        (upstream_repo / "examples" / "mock_scenario_summary.json").read_bytes()
     )
     (skill / "examples" / "verification_output.json").write_bytes(
         (upstream_repo / "examples" / "verification_output.json").read_bytes()
@@ -124,6 +132,8 @@ def test_enumerate_git_tree_returns_sorted_blob_entries(upstream_repo: Path):
         "rup-schema.json",
         "legacy/README.md",
         "examples/discovery_output.json",
+        "examples/execution_output.json",
+        "examples/mock_scenario_summary.json",
         "examples/verification_output.json",
         "foreign/boilerplate.md",
     }
