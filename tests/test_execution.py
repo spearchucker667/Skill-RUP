@@ -703,3 +703,54 @@ def test_ci_generator_agent_only_for_unsupported_language(tmp_path):
     rec = data["recommendations"][0]
     assert rec["disposition"] == "AGENT_ONLY"
     assert "kotlin" in rec["rationale"].lower()
+
+
+def test_execution_reads_constraints_from_plan_state(tmp_path):
+    """RUP-XFER-001: execution must enforce constraints persisted in plan-state.json."""
+    import subprocess
+    from runtime.paths import RupPaths
+    from runtime.state import StateManager
+    from runtime.artifact_builder import ArtifactBuilder
+    from runtime.execution import ExecutionPhase
+
+    repo = tmp_path / "planstate_repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "--quiet", str(repo)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test Runner"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"], check=True, capture_output=True)
+
+    paths = RupPaths(repo)
+    state = StateManager(paths)
+    state.save_json(
+        {"repo_metadata": {"primary_language": "python", "name": repo.name, "repo_type": "application"}},
+        "RUP_DISCOVERY.json",
+    )
+    state.save_json(
+        {
+            "backlog": [
+                {"id": "DOCS-001", "category": "docs", "title": "Missing README", "acceptance_criteria": [], "risk": "low"},
+                {"id": "DOCS-002", "category": "docs", "title": "Missing CONTRIBUTING", "acceptance_criteria": [], "risk": "low"},
+                {"id": "SEC-001", "category": "security", "title": "Exposed Secrets", "acceptance_criteria": [], "risk": "high"},
+            ],
+            "selected_items": ["DOCS-001", "DOCS-002", "SEC-001"],
+            "execution_order": ["DOCS-001", "DOCS-002", "SEC-001"],
+            "risk_analysis": {},
+        },
+        "RUP_PLAN.json",
+    )
+    state.save_json(
+        {"constraints": {"max_files": 1, "risk_tolerance": "low"}},
+        "plan-state.json",
+    )
+
+    builder = ArtifactBuilder(paths)
+    phase = ExecutionPhase(repo, StateManager(paths), builder, allow_exec=True, sandbox_policy="off")
+    data = phase.execute()
+
+    file_changes = [c for c in data["changes"] if c.get("file_path")]
+    assert len(file_changes) <= 1
+    assert not any(c["file_path"] == "CONTRIBUTING.md" for c in data["changes"])
+    assert not any(c["file_path"] == "SECURITY.md" for c in data["changes"])
+    assert any("max-files" in r.get("rationale", "").lower() for r in data["recommendations"])
+    assert any("risk" in r.get("rationale", "").lower() for r in data["recommendations"])

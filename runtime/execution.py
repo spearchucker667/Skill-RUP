@@ -33,11 +33,15 @@ class ExecutionPhase:
         target_dir: Path,
         state_manager: StateManager,
         artifact_builder: ArtifactBuilder,
+        allow_exec: bool = False,
+        sandbox_policy: str = "required",
     ):
         self.target_dir = target_dir
         self.state_manager = state_manager
         self.artifact_builder = artifact_builder
         self.tool_detector = ToolDetector(target_dir)
+        self.allow_exec = allow_exec
+        self.sandbox_policy = sandbox_policy
 
     # ------------------------------------------------------------------
     # Git status helpers
@@ -1174,9 +1178,20 @@ public issue for security-sensitive findings.
         selected_ids = set(plan_data.get("selected_items", []))
         selected_items = [item for item in backlog if item.get("id") in selected_ids]
         execution_order = plan_data.get("execution_order", list(selected_ids))
-        constraints = plan_data.get("constraints", {})
-        max_files = constraints.get("max_files", 20)
-        risk_tolerance = constraints.get("risk_tolerance", "medium")
+
+        plan_state = self.state_manager.load_json("plan-state.json") or {}
+        plan_constraints = plan_state.get("constraints", {})
+        if not plan_constraints:
+            plan_constraints = plan_data.get("constraints", {})
+            if plan_constraints:
+                warnings.warn(
+                    "Execution fell back to legacy RUP_PLAN.json constraints; "
+                    "plan-state.json is the authoritative source.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+        max_files = plan_constraints.get("max_files", 20)
+        risk_tolerance = plan_constraints.get("risk_tolerance", "medium")
         tolerance_rank = RISK_RANK.get(risk_tolerance, 1)
 
         order_index = {item_id: idx for idx, item_id in enumerate(execution_order)}
