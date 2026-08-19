@@ -9,7 +9,7 @@ Implements canonical Phase 4 Reporting & Handoff:
 - Truthful publication instructions (no false PR merge claims)
 """
 import warnings
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Set
 from pathlib import Path
 from .state import StateManager
 from .artifact_builder import ArtifactBuilder
@@ -37,6 +37,7 @@ class ReportingPhase:
         plan_data = self.state_manager.load_json("RUP_PLAN.json")
         execution_data = self.state_manager.load_json("RUP_EXECUTION.json")
         verification_data = self.state_manager.load_json("RUP_VERIFICATION.json")
+        execution_state = self.state_manager.load_json("execution-state.json")
 
         if not (discovery_data and plan_data and execution_data and verification_data):
             raise RuntimeError("Missing previous lifecycle phase states. Cannot generate final report.")
@@ -48,7 +49,14 @@ class ReportingPhase:
         backlog = plan_data.get("backlog", [])
         selected_ids = set(plan_data.get("selected_items", []))
 
-        # Determine follow-ups (unselected items and deferred items)
+        # Determine which selected items did not complete.
+        completion = execution_state.get("per_item_completion", {}) if execution_state else {}
+        incomplete_selected: Set[str] = {
+            item_id for item_id in selected_ids
+            if completion.get(item_id, "COMPLETE") != "COMPLETE"
+        }
+
+        # Determine follow-ups (unselected items and incomplete selected items)
         followups = []
         for b in backlog:
             if b["id"] not in selected_ids:
@@ -57,7 +65,18 @@ class ReportingPhase:
                     "priority": b["priority"],
                     "title": b["title"],
                     "category": b["category"],
-                    "estimated_effort_minutes": b["estimated_effort_minutes"]
+                    "estimated_effort_minutes": b["estimated_effort_minutes"],
+                    "reason": "not_selected",
+                })
+            elif b["id"] in incomplete_selected:
+                followups.append({
+                    "id": b["id"],
+                    "priority": b["priority"],
+                    "title": b["title"],
+                    "category": b["category"],
+                    "estimated_effort_minutes": b["estimated_effort_minutes"],
+                    "reason": "incomplete",
+                    "disposition": completion.get(b["id"], "UNKNOWN"),
                 })
 
         # Rollback commands
@@ -73,7 +92,7 @@ class ReportingPhase:
             rollback_cmds.append("# No changes to revert")
 
         branch = self._get_git_branch()
-        is_ready = (overall_status == "passed")
+        is_ready = (overall_status == "passed" and not incomplete_selected)
 
         if is_ready:
             handoff_instructions = f"Verification passed on branch '{branch}'. Review changes with 'git diff' and commit/push to submit a pull request."
