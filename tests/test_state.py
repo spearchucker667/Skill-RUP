@@ -5,6 +5,7 @@ These tests verify that runtime state is isolated to the controlled ``.rup/``
 directory, that legacy root-level artifacts are not silently trusted, and that
 the artifact ledger and run manifest accurately record provenance.
 """
+import hashlib
 import json
 from pathlib import Path
 
@@ -99,8 +100,7 @@ def test_generate_and_save_manifest_includes_artifacts_ledger(tmp_path):
 
     state.save_json({"hello": "world"}, "RUP_DISCOVERY.json")
 
-    # Capture the ledger before the manifest is generated; the manifest itself
-    # is also recorded in the ledger so the provenance is complete.
+    # Capture the ledger before the manifest is generated.
     ledger_before = list(state._artifact_ledger)
 
     manifest = state.generate_and_save_manifest(
@@ -113,14 +113,36 @@ def test_generate_and_save_manifest_includes_artifacts_ledger(tmp_path):
     assert manifest["run_id"] == state.run_id
     assert "artifacts" in manifest
     assert any(a["name"] == "RUP_DISCOVERY.json" for a in manifest["artifacts"])
-    assert any(a["name"] == "run-manifest.json" for a in manifest["artifacts"])
+    # The manifest ledger must not contain a self-reference entry.
+    assert not any(a["name"] == "run-manifest.json" for a in manifest["artifacts"])
     # Every pre-existing ledger entry must be preserved.
-    pre_manifest = [a for a in manifest["artifacts"] if a["name"] != "run-manifest.json"]
-    assert pre_manifest == ledger_before
+    assert manifest["artifacts"] == ledger_before
 
     # Verify the saved file matches the returned manifest.
     loaded = state.load_json("run-manifest.json")
     assert loaded["artifacts"] == manifest["artifacts"]
+
+
+def test_run_manifest_hash_sidecar_matches_final_file(tmp_path):
+    """The run-manifest.json.sha256 sidecar must hash the final manifest bytes."""
+    paths = RupPaths(tmp_path)
+    state = StateManager(paths)
+
+    state.save_json({"hello": "world"}, "RUP_DISCOVERY.json")
+    state.generate_and_save_manifest(
+        phases_completed=["discovery"],
+        selected_items=["ITEM-001"],
+        execution_changes_count=0,
+        verification_status="pending",
+    )
+
+    manifest_path = paths.state_dir / "run-manifest.json"
+    hash_path = paths.state_dir / "run-manifest.json.sha256"
+    assert manifest_path.exists()
+    assert hash_path.exists()
+
+    expected_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    assert hash_path.read_text(encoding="utf-8").strip() == expected_hash
 
 
 def test_custom_state_dir_outside_target_is_rejected(tmp_path):
@@ -237,7 +259,8 @@ def test_fresh_state_manager_recovers_ledger_from_disk(tmp_path):
     artifact_names = {a["name"] for a in manifest["artifacts"]}
     assert "RUP_DISCOVERY.json" in artifact_names
     assert "session-state.json" in artifact_names
-    assert "run-manifest.json" in artifact_names
+    assert "run-manifest.json" not in artifact_names
+    assert (paths.state_dir / "run-manifest.json.sha256").exists()
 
 
 def test_generate_and_save_manifest_rebuilds_full_ledger(tmp_path):
@@ -274,7 +297,8 @@ def test_generate_and_save_manifest_rebuilds_full_ledger(tmp_path):
     artifact_names = {a["name"] for a in manifest["artifacts"]}
     for name in lifecycle_artifacts:
         assert name in artifact_names, f"{name} missing from manifest artifacts"
-    assert "run-manifest.json" in artifact_names
+    assert "run-manifest.json" not in artifact_names
+    assert (state_dir / "run-manifest.json.sha256").exists()
 
     loaded = state.load_json("run-manifest.json")
     assert loaded["artifacts"] == manifest["artifacts"]

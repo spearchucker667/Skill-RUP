@@ -24,6 +24,7 @@ _ARTIFACT_PHASE_MAP = {
     "RUP_VERIFICATION.json": "verification",
     "RUP_FINAL_REPORT.json": "reporting",
     "run-manifest.json": "manifest",
+    "run-manifest.json.sha256": "manifest",
     "session-state.json": "session",
     "RUP_DISCOVERY.md": "discovery",
     "RUP_PLAN.md": "planning",
@@ -31,6 +32,16 @@ _ARTIFACT_PHASE_MAP = {
     "RUP_VERIFICATION.md": "verification",
     "RUP_FINAL_REPORT.md": "reporting",
 }
+
+
+def _infer_artifact_type(filename: str) -> str:
+    if filename.endswith(".json"):
+        return "json"
+    if filename.endswith(".md"):
+        return "markdown"
+    if filename.endswith(".sha256"):
+        return "checksum"
+    return "unknown"
 
 
 def _infer_artifact_phase(filename: str) -> str:
@@ -205,7 +216,7 @@ class StateManager:
                 continue
             if path.name.startswith("."):
                 continue
-            if path.suffix not in (".json", ".md"):
+            if path.suffix not in (".json", ".md", ".sha256"):
                 continue
             if path.name in existing:
                 continue
@@ -270,13 +281,14 @@ class StateManager:
             "selected_items": selected_items,
             "execution_changes_count": execution_changes_count,
             "verification_status": verification_status,
-            "artifacts": list(self._artifact_ledger),
+            "artifacts": [entry for entry in self._artifact_ledger if entry.get("name") != "run-manifest.json"],
         }
-        # First save: the manifest payload without the self-reference entry.
+        # Save the final manifest once. The ledger intentionally excludes the
+        # manifest itself so that the file bytes are stable and the self-hash
+        # invariant is meaningful.
         self.save_json(manifest, "run-manifest.json")
 
-        # Compute the hash of the payload manifest (excluding self-reference) and
-        # append a self-reference entry so the ledger is complete.
+        # Compute the hash of the final manifest and write it to a sidecar file.
         manifest_path = self._get_artifact_path("run-manifest.json")
         try:
             manifest_sha256 = _compute_sha256(manifest_path)
@@ -284,19 +296,20 @@ class StateManager:
             warnings.warn(f"Could not hash run-manifest.json: {e}", RuntimeWarning, stacklevel=2)
             manifest_sha256 = ""
 
-        manifest["artifacts"].append(
-            {
-                "name": "run-manifest.json",
-                "sha256": manifest_sha256,
-                "created_at": now_str,
-                "run_id": self.run_id,
-                "phase": "reporting",
-                "type": "json",
-                "relative_path": "run-manifest.json",
-            }
-        )
-        # Second save: manifest now includes its own ledger entry.
-        self.save_json(manifest, "run-manifest.json")
+        hash_path = self._get_artifact_path("run-manifest.json.sha256")
+        fd, temp_path = tempfile.mkstemp(dir=hash_path.parent, prefix=".rup_tmp_", suffix=".sha256")
+        try:
+            with open(fd, "w", encoding="utf-8") as f:
+                f.write(manifest_sha256)
+            os.replace(temp_path, hash_path)
+        except Exception:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
+
+        # Record the manifest and its hash sidecar in the in-memory ledger for
+        # any downstream consumers that need a complete artifact list.
+        self._record_artifact("run-manifest.json.sha256")
         return manifest
 
     def update_session_state(self, phase: str) -> Dict[str, Any]:
@@ -339,7 +352,7 @@ class StateManager:
             "created_at": now_str,
             "run_id": self.run_id,
             "phase": _infer_artifact_phase(filename),
-            "type": "json" if filename.endswith(".json") else "markdown",
+            "type": _infer_artifact_type(filename),
             "relative_path": rel_path,
         }
         # Replace any existing entry for this filename to keep the ledger current.
