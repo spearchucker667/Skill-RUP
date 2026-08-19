@@ -12,7 +12,9 @@ Implements canonical Phase 3 Execution per RUP-EXEC-001..007:
 """
 import json
 import os
+import re
 import shlex
+import sys
 import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -811,6 +813,92 @@ public issue for security-sensitive findings.
         ]
 
     # ------------------------------------------------------------------
+    # Baseline coverage / test counts (before changes are applied)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _parse_test_counts(stdout: str, stderr: str, rc: int) -> Tuple[int, int, int]:
+        combined = stdout + "\n" + stderr
+        m_pass = re.search(r"(\d+)\s+passed", combined)
+        m_fail = re.search(r"(\d+)\s+failed", combined)
+        m_skip = re.search(r"(\d+)\s+skipped", combined)
+        m_collected = re.search(r"collected\s+(\d+)\s+item", combined, re.IGNORECASE)
+
+        passed = int(m_pass.group(1)) if m_pass else 0
+        failed = int(m_fail.group(1)) if m_fail else 0
+        skipped = int(m_skip.group(1)) if m_skip else 0
+        collected = int(m_collected.group(1)) if m_collected else (passed + failed + skipped)
+
+        if passed == 0 and failed == 0 and rc == 0:
+            passed = 1
+        if failed == 0 and rc != 0:
+            failed = 1
+
+        return passed, failed, skipped, collected
+
+    def _collect_baseline_coverage(self) -> Dict[str, Any]:
+        """Run tests with coverage before changes to establish a true before/after delta."""
+        tools = self.tool_detector.detect_all()
+        framework = tools.get("test_framework")
+        test_cmd = self._test_command(framework)
+        if not test_cmd:
+            return {"coverage_before": None, "tests_before": 0}
+
+        coverage_before: Optional[float] = None
+        tests_before = 0
+
+        if framework == "pytest":
+            cov_cmd = [sys.executable, "-m", "coverage", "run", "--source=.", "-m", "pytest", "-q"]
+            rc, stdout, stderr = run_command(cov_cmd, cwd=self.target_dir, timeout=180)
+            if rc == 0:
+                rc2, stdout2, _ = run_command(
+                    [sys.executable, "-m", "coverage", "report"],
+                    cwd=self.target_dir,
+                    timeout=60,
+                )
+                if rc2 == 0:
+                    for line in reversed(stdout2.splitlines()):
+                        parts = line.split()
+                        if parts and parts[0] == "TOTAL":
+                            try:
+                                coverage_before = float(parts[-1].replace("%", ""))
+                            except ValueError:
+                                pass
+                            break
+            passed, failed, skipped, collected = self._parse_test_counts(stdout, stderr, rc)
+            tests_before = collected
+        elif framework in ("jest", "vitest", "mocha", "npm-test") or tools.get("build_tool") in ("npm", "pnpm", "yarn"):
+            build_tool = tools.get("build_tool")
+            pkg_mgr = build_tool if build_tool in ("npm", "pnpm", "yarn") else "npm"
+            if test_cmd and test_cmd[0] == pkg_mgr and test_cmd[1:] == ["test"]:
+                cov_cmd = test_cmd + ["--", "--coverage"]
+            else:
+                cov_cmd = test_cmd + ["--coverage"]
+            rc, stdout, stderr = run_command(cov_cmd, cwd=self.target_dir, timeout=180)
+            if rc == 0:
+                combined = stdout + "\n" + stderr
+                m = re.search(
+                    r"All files\s*\|[\s\d.]+\|[\s\d.]+\|[\s\d.]+\|\s*([\d.]+)%",
+                    combined,
+                )
+                if m:
+                    coverage_before = float(m.group(1))
+                else:
+                    m = re.search(r"Statements\s*:\s*([\d.]+)%", combined)
+                    if m:
+                        coverage_before = float(m.group(1))
+            passed, failed, skipped, collected = self._parse_test_counts(stdout, stderr, rc)
+            tests_before = collected
+
+        # Best-effort cleanup of temporary coverage files.
+        for cov_file in self.target_dir.glob(".coverage*"):
+            try:
+                cov_file.unlink()
+            except Exception:
+                pass
+
+        return {"coverage_before": coverage_before, "tests_before": tests_before}
+
+    # ------------------------------------------------------------------
     # Local verification
     # ------------------------------------------------------------------
     def _test_command(self, framework: Optional[str]) -> Optional[List[str]]:
@@ -1042,6 +1130,9 @@ public issue for security-sensitive findings.
         # RUP-EXEC-005: capture baseline Git status before applying changes.
         baseline_paths = self._baseline_paths()
 
+        # Capture baseline coverage and test counts before any changes are applied.
+        baseline = self._collect_baseline_coverage()
+
         changes: List[Dict[str, Any]] = []
         recommendations: List[Dict[str, Any]] = []
         changed_files: Set[str] = set()
@@ -1172,6 +1263,9 @@ public issue for security-sensitive findings.
             },
             "per_item_completion": per_item_completion,
             "rollback_operations": rollback_procedure.get("operations", []),
+            "coverage_before": baseline["coverage_before"],
+            "tests_before": baseline["tests_before"],
+            "coverage_delta": None,
         }
 
         # Save machine-readable state atomically.

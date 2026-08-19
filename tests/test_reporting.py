@@ -183,3 +183,32 @@ def test_rollback_commands_quote_hostile_filenames(tmp_path):
     assert shlex.quote("foo'; command; echo '.py") in modify_cmd
     assert "rm -f --" in create_cmd
     assert "git checkout --" in modify_cmd
+
+
+def test_reporting_includes_readiness_debt_deltas_and_completed_count(tmp_path):
+    """RUP-REPORT-004: final metrics reflect post-execution state and true completion count."""
+    repo = tmp_path / "delta_repo"
+    repo.mkdir()
+
+    phase = _write_phase_states(
+        repo,
+        selected_items=["BUG-001"],
+        verification_status="passed",
+        execution_state={
+            "recommendations": [],
+            "dispositions": {},
+            "per_item_completion": {"BUG-001": "COMPLETE"},
+            "rollback_operations": [],
+        },
+    )
+    report = phase.execute()
+
+    metrics = report["metrics"]
+    assert "readiness_before" in metrics
+    assert "readiness_after" in metrics
+    assert "readiness_delta" in metrics
+    assert "debt_before" in metrics
+    assert "debt_after" in metrics
+    assert "debt_delta" in metrics
+    assert report["summary"]["total_items_processed"] == 1
+    assert "reporting" in report["phases_completed"]

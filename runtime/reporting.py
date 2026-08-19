@@ -15,6 +15,9 @@ from pathlib import Path
 from .state import StateManager
 from .artifact_builder import ArtifactBuilder
 from .command_runner import run_command
+from .discovery import DiscoveryPhase
+from .inventory import InventoryManager
+from .tool_detection import ToolDetector
 
 class ReportingPhase:
     def __init__(self, target_dir: Path, state_manager: StateManager, artifact_builder: ArtifactBuilder):
@@ -31,6 +34,45 @@ class ReportingPhase:
         except Exception as e:
             warnings.warn(f"Git branch query failed: {e}", RuntimeWarning, stacklevel=2)
         return "local-workspace"
+
+    def _rescore_after_execution(
+        self, discovery_data: Dict[str, Any], verification_status: str
+    ) -> Dict[str, Any]:
+        """Recompute readiness/debt against the post-execution repository state.
+
+        The canonical discovery scorer is reused so that newly created files and
+        resolved gaps are reflected. Verification failures are then applied as an
+        additional penalty because the repository is not yet submission-ready.
+        """
+        try:
+            inventory = InventoryManager(self.target_dir).analyze_inventory()
+            languages = inventory["languages"]
+            metadata = InventoryManager(self.target_dir).get_repo_metadata()
+            tooling = ToolDetector(self.target_dir).detect_all()
+            # Use DiscoveryPhase helper methods without overwriting the saved
+            # discovery artifact from the start of the run.
+            discovery = DiscoveryPhase(self.target_dir, self.state_manager, self.artifact_builder)
+            gaps_after = discovery._evaluate_all_gaps(metadata, languages, tooling)
+            risk_after = discovery._calculate_risk_and_scores(gaps_after, metadata)
+            readiness_after = risk_after["production_readiness_score"]
+            debt_after = risk_after["technical_debt_score"]
+        except Exception as e:
+            warnings.warn(f"Could not rescore repository after execution: {e}", RuntimeWarning, stacklevel=2)
+            readiness_after = discovery_data.get("risk_assessment", {}).get("production_readiness_score", 100)
+            debt_after = discovery_data.get("risk_assessment", {}).get("technical_debt_score", 0)
+
+        # Verification status modifies the score: a failed run is not ready.
+        if verification_status == "failed":
+            readiness_after = max(0, readiness_after - 20)
+            debt_after = min(100, debt_after + 20)
+        elif verification_status == "passed_with_warnings":
+            readiness_after = max(0, readiness_after - 10)
+            debt_after = min(100, debt_after + 10)
+
+        return {
+            "readiness_after": readiness_after,
+            "debt_after": debt_after,
+        }
 
     def execute(self) -> Dict[str, Any]:
         """Generate comprehensive final report and handoff package."""
@@ -56,6 +98,14 @@ class ReportingPhase:
             item_id for item_id in selected_ids
             if completion.get(item_id, "COMPLETE") != "COMPLETE"
         }
+        completed_count = len(selected_ids) - len(incomplete_selected)
+
+        # Recompute readiness/debt against the post-execution repository state.
+        readiness_before = discovery_data.get("risk_assessment", {}).get("production_readiness_score", 100)
+        debt_before = discovery_data.get("risk_assessment", {}).get("technical_debt_score", 0)
+        after_scores = self._rescore_after_execution(discovery_data, overall_status)
+        readiness_after = after_scores["readiness_after"]
+        debt_after = after_scores["debt_after"]
 
         # Determine follow-ups (unselected items and incomplete selected items)
         followups = []
@@ -107,14 +157,21 @@ class ReportingPhase:
         report_data = {
             "summary": {
                 "overall_status": overall_status,
-                "total_items_processed": len(selected_ids),
+                "total_items_selected": len(selected_ids),
+                "total_items_processed": completed_count,
                 "total_changes": len(changes),
                 "ready_for_submission": is_ready
             },
-            "phases_completed": ["discovery", "plan", "execution", "verification"],
+            "phases_completed": ["discovery", "plan", "execution", "verification", "reporting"],
             "metrics": {
-                "production_readiness_score": discovery_data.get("risk_assessment", {}).get("production_readiness_score", 100),
-                "technical_debt_score": discovery_data.get("risk_assessment", {}).get("technical_debt_score", 0),
+                "production_readiness_score": readiness_after,
+                "technical_debt_score": debt_after,
+                "readiness_before": readiness_before,
+                "readiness_after": readiness_after,
+                "readiness_delta": readiness_after - readiness_before,
+                "debt_before": debt_before,
+                "debt_after": debt_after,
+                "debt_delta": debt_after - debt_before,
                 "files_changed": metrics.get("files_changed", len(changes)),
                 "lines_added": metrics.get("lines_added", 0),
                 "lines_removed": metrics.get("lines_removed", 0),

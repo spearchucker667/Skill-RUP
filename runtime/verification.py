@@ -112,6 +112,7 @@ class VerificationPhase:
             "duration_seconds": 0.0,
             "coverage_before": None,
             "coverage_after": None,
+            "coverage_delta": None,
             "flaky_tests": [],
             "new_tests_added": 0,
             "status": status,
@@ -243,15 +244,17 @@ class VerificationPhase:
             return [pkg_mgr, "test"]
         return None
 
-    def _parse_test_counts(self, stdout: str, stderr: str, rc: int) -> Tuple[int, int, int]:
+    def _parse_test_counts(self, stdout: str, stderr: str, rc: int) -> Tuple[int, int, int, int]:
         combined = stdout + "\n" + stderr
         m_pass = re.search(r"(\d+)\s+passed", combined)
         m_fail = re.search(r"(\d+)\s+failed", combined)
         m_skip = re.search(r"(\d+)\s+skipped", combined)
+        m_collected = re.search(r"collected\s+(\d+)\s+item", combined, re.IGNORECASE)
 
         passed = int(m_pass.group(1)) if m_pass else 0
         failed = int(m_fail.group(1)) if m_fail else 0
         skipped = int(m_skip.group(1)) if m_skip else 0
+        collected = int(m_collected.group(1)) if m_collected else (passed + failed + skipped)
 
         # Fallback for simple runners that do not emit pytest-style summaries.
         if passed == 0 and failed == 0 and rc == 0:
@@ -259,7 +262,7 @@ class VerificationPhase:
         if failed == 0 and rc != 0:
             failed = 1
 
-        return passed, failed, skipped
+        return passed, failed, skipped, collected
 
     def _collect_coverage(self, test_cmd: List[str]) -> Optional[float]:
         """Collect a real coverage percentage when the ecosystem supports it.
@@ -353,11 +356,8 @@ class VerificationPhase:
                 tool=cmd[0],
             )
 
-        runs = []
+        runs: List[Dict[str, Any]] = []
         total_duration = 0.0
-        max_passed = 0
-        max_failed = 0
-        max_skipped = 0
         last_stdout = ""
         last_stderr = ""
 
@@ -366,22 +366,55 @@ class VerificationPhase:
             rc, stdout, stderr = run_command(cmd, cwd=self.target_dir, timeout=120)
             elapsed = time.perf_counter() - start
             total_duration += elapsed
-            runs.append(rc == 0)
             last_stdout = stdout
             last_stderr = stderr
 
-            passed, failed, skipped = self._parse_test_counts(stdout, stderr, rc)
-            max_passed = max(max_passed, passed)
-            max_failed = max(max_failed, failed)
-            max_skipped = max(max_skipped, skipped)
+            passed, failed, skipped, collected = self._parse_test_counts(stdout, stderr, rc)
+            runs.append({
+                "rc": rc,
+                "passed": passed,
+                "failed": failed,
+                "skipped": skipped,
+                "collected": collected,
+            })
 
-        all_passed = all(runs)
-        any_passed = any(runs)
+        all_passed = all(r["rc"] == 0 for r in runs)
+        any_passed = any(r["rc"] == 0 for r in runs)
         flaky = []
         if any_passed and not all_passed:
             flaky.append("Primary test suite showed non-deterministic failure across 3 runs")
 
+        # Detect variance across any meaningful dimension.
+        for dim in ("passed", "failed", "skipped", "collected"):
+            values = [r[dim] for r in runs]
+            if len(set(values)) > 1:
+                flaky.append(f"Test {dim} count varied across runs: {values}")
+
+        max_passed = max(r["passed"] for r in runs)
+        max_failed = max(r["failed"] for r in runs)
+        max_skipped = max(r["skipped"] for r in runs)
+
         coverage_after = self._collect_coverage(cmd) if cmd else None
+
+        # Load baseline coverage/test counts captured by the execution phase.
+        execution_state_raw = self.state_manager.load_json("execution-state.json")
+        execution_state = execution_state_raw if execution_state_raw is not None else {}
+        coverage_before = execution_state.get("coverage_before")
+        tests_before = execution_state.get("tests_before", 0)
+        tests_after = max(r["collected"] for r in runs) if runs else 0
+        coverage_delta = (
+            (coverage_after or 0) - (coverage_before or 0)
+            if coverage_before is not None and coverage_after is not None
+            else None
+        )
+
+        # Update the Skill-only sidecar with the after state so downstream
+        # reporting and audit tooling can see true before/after deltas.
+        if execution_state_raw is not None:
+            execution_state["coverage_after"] = coverage_after
+            execution_state["coverage_delta"] = coverage_delta
+            execution_state["tests_after"] = tests_after
+            self.state_manager.save_json(execution_state, "execution-state.json")
 
         return {
             "executed": True,
@@ -389,10 +422,10 @@ class VerificationPhase:
             "failed": max_failed if not all_passed else 0,
             "skipped": max_skipped,
             "duration_seconds": round(total_duration, 2),
-            "coverage_before": None,
+            "coverage_before": coverage_before,
             "coverage_after": coverage_after,
             "flaky_tests": flaky,
-            "new_tests_added": 0,
+            "new_tests_added": max(0, tests_after - tests_before),
             "tool": " ".join(cmd),
         }
 
