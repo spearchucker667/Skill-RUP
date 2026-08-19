@@ -78,6 +78,7 @@ class ReportingPhase:
         """Generate comprehensive final report and handoff package."""
         discovery_data = self.state_manager.load_json("RUP_DISCOVERY.json")
         plan_data = self.state_manager.load_json("RUP_PLAN.json")
+        plan_state = self.state_manager.load_json("plan-state.json")
         execution_data = self.state_manager.load_json("RUP_EXECUTION.json")
         verification_data = self.state_manager.load_json("RUP_VERIFICATION.json")
         execution_state = self.state_manager.load_json("execution-state.json")
@@ -93,12 +94,21 @@ class ReportingPhase:
         selected_ids = set(plan_data.get("selected_items", []))
 
         # Determine which selected items did not complete.
-        completion = execution_state.get("per_item_completion", {}) if execution_state else {}
-        incomplete_selected: Set[str] = {
-            item_id for item_id in selected_ids
-            if completion.get(item_id, "COMPLETE") != "COMPLETE"
-        }
+        execution_state_valid = isinstance(execution_state, dict)
+        completion = execution_state.get("per_item_completion", {}) if execution_state_valid else {}
+        incomplete_selected: Set[str] = set()
+        for item_id in selected_ids:
+            if not execution_state_valid:
+                incomplete_selected.add(item_id)
+            else:
+                disp = completion.get(item_id, "UNKNOWN")
+                if disp != "COMPLETE":
+                    incomplete_selected.add(item_id)
         completed_count = len(selected_ids) - len(incomplete_selected)
+
+        # Escalated P0 items also block submission, even though they were never
+        # admitted to the selected set.
+        escalated_ids: Set[str] = set(plan_state.get("selected_for_escalation", []))
 
         # Recompute readiness/debt against the post-execution repository state.
         readiness_before = discovery_data.get("risk_assessment", {}).get("production_readiness_score", 100)
@@ -107,17 +117,19 @@ class ReportingPhase:
         readiness_after = after_scores["readiness_after"]
         debt_after = after_scores["debt_after"]
 
-        # Determine follow-ups (unselected items and incomplete selected items)
+        # Determine follow-ups (escalated items, incomplete selected items, and
+        # unselected backlog items).
         followups = []
         for b in backlog:
-            if b["id"] not in selected_ids:
+            if b["id"] in escalated_ids:
                 followups.append({
                     "id": b["id"],
                     "priority": b["priority"],
                     "title": b["title"],
                     "category": b["category"],
                     "estimated_effort_minutes": b["estimated_effort_minutes"],
-                    "reason": "not_selected",
+                    "reason": "escalated",
+                    "requires_explicit_override": True,
                 })
             elif b["id"] in incomplete_selected:
                 followups.append({
@@ -127,7 +139,16 @@ class ReportingPhase:
                     "category": b["category"],
                     "estimated_effort_minutes": b["estimated_effort_minutes"],
                     "reason": "incomplete",
-                    "disposition": completion.get(b["id"], "UNKNOWN"),
+                    "disposition": completion.get(b["id"], "UNKNOWN") if execution_state_valid else "UNKNOWN",
+                })
+            elif b["id"] not in selected_ids:
+                followups.append({
+                    "id": b["id"],
+                    "priority": b["priority"],
+                    "title": b["title"],
+                    "category": b["category"],
+                    "estimated_effort_minutes": b["estimated_effort_minutes"],
+                    "reason": "not_selected",
                 })
 
         # Rollback commands (quoted for hostile filenames)
@@ -147,7 +168,11 @@ class ReportingPhase:
             rollback_cmds.append("# No changes to revert")
 
         branch = self._get_git_branch()
-        is_ready = (overall_status == "passed" and not incomplete_selected)
+        is_ready = (
+            overall_status == "passed"
+            and not incomplete_selected
+            and not escalated_ids
+        )
 
         if is_ready:
             handoff_instructions = f"Verification passed on branch '{branch}'. Review changes with 'git diff' and commit/push to submit a pull request."

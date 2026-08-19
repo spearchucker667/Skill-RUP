@@ -57,9 +57,14 @@ def _compute_sha256(file_path: Path) -> str:
 
 
 class StateManager:
-    def __init__(self, paths: RupPaths, run_id: Optional[str] = None):
+    def __init__(self, paths: RupPaths, run_id: Optional[str] = None, resume: bool = False):
         self.paths = paths
-        self.run_id = run_id or self._recover_run_id() or self._generate_run_id()
+        if run_id is not None:
+            self.run_id = run_id
+        elif resume:
+            self.run_id = self._recover_run_id() or self._generate_run_id()
+        else:
+            self.run_id = self._generate_run_id()
         self._session_state: Optional[SessionState] = None
         self._artifact_ledger: List[Dict[str, Any]] = []
 
@@ -236,6 +241,10 @@ class StateManager:
         if not self.paths.state_dir.exists():
             return
 
+        # The manifest and its checksum sidecar are produced after the ledger is
+        # rebuilt; they must never appear as ledger entries.
+        excluded_names = {"run-manifest.json", "run-manifest.json.sha256"}
+
         existing = {entry["name"] for entry in self._artifact_ledger}
         for path in sorted(self.paths.state_dir.iterdir()):
             if not path.is_file():
@@ -244,7 +253,7 @@ class StateManager:
                 continue
             if path.suffix not in (".json", ".md", ".sha256"):
                 continue
-            if path.name in existing:
+            if path.name in existing or path.name in excluded_names:
                 continue
 
             try:
@@ -275,7 +284,7 @@ class StateManager:
                     "created_at": created_at,
                     "run_id": self.run_id,
                     "phase": _infer_artifact_phase(path.name),
-                    "type": "json" if path.suffix == ".json" else "markdown",
+                    "type": _infer_artifact_type(path.name),
                     "relative_path": rel_path,
                 }
             )
@@ -307,11 +316,14 @@ class StateManager:
             "selected_items": selected_items,
             "execution_changes_count": execution_changes_count,
             "verification_status": verification_status,
-            "artifacts": [entry for entry in self._artifact_ledger if entry.get("name") != "run-manifest.json"],
+            "artifacts": [
+                entry for entry in self._artifact_ledger
+                if entry.get("name") not in ("run-manifest.json", "run-manifest.json.sha256")
+            ],
         }
         # Save the final manifest once. The ledger intentionally excludes the
-        # manifest itself so that the file bytes are stable and the self-hash
-        # invariant is meaningful.
+        # manifest itself and its checksum sidecar so that the file bytes are
+        # stable and the self-hash invariant is meaningful.
         self.save_json(manifest, "run-manifest.json")
 
         # Compute the hash of the final manifest and write it to a sidecar file.
@@ -355,6 +367,11 @@ class StateManager:
 
     def _record_artifact(self, filename: str) -> None:
         """Record an artifact entry in the run ledger."""
+        # The manifest and its checksum sidecar are downstream of the ledger; do
+        # not include them as ledger entries.
+        if filename in ("run-manifest.json", "run-manifest.json.sha256"):
+            return
+
         artifact_path = self._get_artifact_path(filename)
         try:
             sha256 = _compute_sha256(artifact_path)

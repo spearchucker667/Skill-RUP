@@ -79,9 +79,10 @@ def test_constraints_persisted_and_rendered(tmp_path):
         max_files=5,
         risk_tolerance="low",
     )
-    plan_data = phase.execute()
+    phase.execute()
 
-    assert plan_data["constraints"] == {
+    plan_state = phase.state_manager.load_json("plan-state.json")
+    assert plan_state["constraints"] == {
         "time_budget_minutes": 30,
         "max_files": 5,
         "risk_tolerance": "low",
@@ -176,10 +177,11 @@ def test_p0_exceeding_max_files_is_escalated(tmp_path):
         risk_tolerance="low",
     )
     plan_data = phase.execute()
+    plan_state = phase.state_manager.load_json("plan-state.json")
 
     assert "BUG-001" not in plan_data["selected_items"]
-    assert "BUG-001" in plan_data.get("selected_for_escalation", [])
-    assert plan_data.get("requires_explicit_override") is True
+    assert "BUG-001" in plan_state.get("selected_for_escalation", [])
+    assert plan_state.get("requires_explicit_override") is True
 
 
 def test_p0_exceeding_time_budget_is_escalated(tmp_path):
@@ -192,9 +194,10 @@ def test_p0_exceeding_time_budget_is_escalated(tmp_path):
         risk_tolerance="high",
     )
     plan_data = phase.execute()
+    plan_state = phase.state_manager.load_json("plan-state.json")
 
     assert "BUG-001" not in plan_data["selected_items"]
-    assert "BUG-001" in plan_data.get("selected_for_escalation", [])
+    assert "BUG-001" in plan_state.get("selected_for_escalation", [])
 
 
 def test_p0_above_risk_tolerance_is_escalated(tmp_path):
@@ -207,9 +210,10 @@ def test_p0_above_risk_tolerance_is_escalated(tmp_path):
         risk_tolerance="low",
     )
     plan_data = phase.execute()
+    plan_state = phase.state_manager.load_json("plan-state.json")
 
     assert "BUG-001" not in plan_data["selected_items"]
-    assert "BUG-001" in plan_data.get("selected_for_escalation", [])
+    assert "BUG-001" in plan_state.get("selected_for_escalation", [])
 
 
 def test_fallback_item_respects_time_budget(tmp_path):
@@ -222,9 +226,10 @@ def test_fallback_item_respects_time_budget(tmp_path):
         risk_tolerance="high",
     )
     plan_data = phase.execute()
+    plan_state = phase.state_manager.load_json("plan-state.json")
 
     assert plan_data["selected_items"] == []
-    assert plan_data.get("selected_for_escalation", []) == []
+    assert plan_state.get("selected_for_escalation", []) == []
 
 
 def test_dependency_cycle_raises_planning_error(tmp_path):

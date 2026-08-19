@@ -22,13 +22,14 @@ def test_plan_execution(tmp_path):
     paths = RupPaths(repo_dir)
     state = StateManager(paths)
     data = state.load_json("RUP_PLAN.json")
+    plan_state = state.load_json("plan-state.json")
 
     assert "backlog" in data
     assert "selected_items" in data
-    assert "constraints" in data
-    assert data["constraints"]["time_budget_minutes"] == 45
-    assert data["constraints"]["max_files"] == 20
-    assert data["constraints"]["risk_tolerance"] == "medium"
+    assert "constraints" in plan_state
+    assert plan_state["constraints"]["time_budget_minutes"] == 45
+    assert plan_state["constraints"]["max_files"] == 20
+    assert plan_state["constraints"]["risk_tolerance"] == "medium"
 
     md_text = (repo_dir / ".rup" / "RUP_PLAN.md").read_text(encoding="utf-8")
     assert "**Time Budget**: 45 minutes" in md_text
@@ -57,9 +58,9 @@ def test_plan_with_custom_constraints(tmp_path):
 
     paths = RupPaths(repo_dir)
     state = StateManager(paths)
-    data = state.load_json("RUP_PLAN.json")
+    plan_state = state.load_json("plan-state.json")
 
-    assert data["constraints"] == {
+    assert plan_state["constraints"] == {
         "time_budget_minutes": 10,
         "max_files": 3,
         "risk_tolerance": "low",

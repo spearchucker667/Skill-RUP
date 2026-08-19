@@ -13,13 +13,20 @@ from runtime.verification import VerificationPhase
 
 
 class DummyStateManager:
-    def __init__(self, exec_data: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        exec_data: Optional[Dict[str, Any]] = None,
+        exec_state: Optional[Dict[str, Any]] = None,
+    ):
         self.exec_data = exec_data or {"changes": []}
+        self.exec_state = exec_state or {}
         self.saved: Dict[str, Any] = {}
 
     def load_json(self, name: str) -> Dict[str, Any]:
         if name == "RUP_EXECUTION.json":
             return self.exec_data
+        if name == "execution-state.json":
+            return self.exec_state
         return {}
 
     def save_json(self, data: Dict[str, Any], name: str) -> Path:
@@ -38,8 +45,12 @@ class DummyArtifactBuilder:
 
 @pytest.fixture
 def make_phase(tmp_path):
-    def _make(strict: bool = False, exec_data: Optional[Dict[str, Any]] = None):
-        state = DummyStateManager(exec_data)
+    def _make(
+        strict: bool = False,
+        exec_data: Optional[Dict[str, Any]] = None,
+        exec_state: Optional[Dict[str, Any]] = None,
+    ):
+        state = DummyStateManager(exec_data, exec_state)
         builder = DummyArtifactBuilder()
         phase = VerificationPhase(tmp_path, state, builder, strict=strict)
         return phase, state, builder
@@ -346,3 +357,69 @@ def test_lint_ruff_counts_violations_via_json(make_phase, tmp_path, monkeypatch)
     assert lint["executed"] is True
     assert lint["tool"] == "ruff"
     assert lint["violations_after"] == 2
+
+
+def test_node_coverage_forwards_flag_via_dash_dash(make_phase, tmp_path, monkeypatch):
+    """RUP-VERIFY-009: npm/pnpm/yarn test scripts must forward --coverage via '--'."""
+    (tmp_path / "package.json").write_text(
+        '{"scripts": {"test": "jest"}}', encoding="utf-8"
+    )
+
+    phase, _, _ = make_phase()
+    phase._tools["test_framework"] = "npm-test"
+    phase._tools["build_tool"] = "npm"
+
+    captured: List[List[str]] = []
+
+    def _fake_run_command(cmd, cwd, timeout=300, env=None):
+        captured.append(cmd)
+        if cmd[:2] == ["npm", "test"] and "--coverage" in cmd:
+            return 0, "All files | 95 | 80 | 100 | 95%", ""
+        return 127, "", "not found"
+
+    monkeypatch.setattr(verification, "run_command", _fake_run_command)
+
+    coverage = phase._collect_coverage(["npm", "test"])
+    assert coverage == 95.0
+    assert ["npm", "test", "--", "--coverage"] in captured
+
+
+def test_run_tests_records_flakiness_and_coverage_delta(make_phase, tmp_path, monkeypatch):
+    """RUP-VERIFY-010: 3-run flakiness detects count variance and computes coverage/test deltas."""
+    (tmp_path / "test_app.py").write_text("def test_x(): assert True\n", encoding="utf-8")
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+
+    exec_state = {"coverage_before": 70.0, "tests_before": 5}
+    phase, state, _ = make_phase(exec_state=exec_state)
+    phase._tools["test_framework"] = "pytest"
+    monkeypatch.setattr(phase, "_tool_available", lambda _e: True)
+    monkeypatch.setattr(phase, "_collect_coverage", lambda _cmd: 80.0)
+
+    outputs = [
+        "collected 8 items\n7 passed, 0 failed, 1 skipped",
+        "collected 8 items\n6 passed, 1 failed, 1 skipped",
+        "collected 8 items\n7 passed, 0 failed, 1 skipped",
+    ]
+    call_iter = iter(outputs)
+
+    def _fake_run_command(cmd, cwd, timeout=300, env=None):
+        if cmd[:3] == [sys.executable, "-m", "pytest"]:
+            return 0, next(call_iter), ""
+        return 127, "", "not found"
+
+    monkeypatch.setattr(verification, "run_command", _fake_run_command)
+
+    result = phase._run_tests_with_flakiness()
+
+    assert result["executed"] is True
+    assert len(result["flaky_tests"]) > 0, (
+        f"Expected flakiness detection, got {result['flaky_tests']}"
+    )
+    assert result["coverage_before"] == 70.0
+    assert result["coverage_after"] == 80.0
+    assert result["new_tests_added"] == 3  # 8 collected - 5 before
+
+    saved = state.saved.get("execution-state.json", {})
+    assert saved.get("coverage_after") == 80.0
+    assert saved.get("coverage_delta") == 10.0
+    assert saved.get("tests_after") == 8

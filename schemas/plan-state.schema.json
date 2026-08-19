@@ -1,124 +1,50 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://spearchucker667.github.io/RUP/schemas/rup-schema-derived.schema.json",
-  "x_rup_schema_version": "3.0.0",
-  "title": "RUP Protocol Schema \u2014 Skill-RUP Derived Runtime Contract",
-  "description": "Skill-RUP runtime artifact contract. Extends the canonical upstream schema with sidecars and runtime-only metadata while keeping canonical output definitions compatible with protocol/rup-schema.json.",
+  "$id": "https://spearchucker667.github.io/RUP/schemas/plan-state.schema.json",
+  "title": "Plan State Schema",
   "type": "object",
-  "required": [
-    "schema_version",
-    "protocol_version",
-    "metadata",
-    "agent_architecture",
-    "priorities",
-    "guardrails",
-    "evaluation",
-    "phases"
-  ],
   "properties": {
-    "schema_version": {
-      "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "description": "Semantic version of the schema",
-      "examples": [
-        "3.0.0"
-      ]
-    },
-    "protocol_version": {
-      "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "description": "Semantic version of the protocol",
-      "examples": [
-        "3.0.0"
-      ]
-    },
-    "last_updated": {
-      "type": "string",
-      "format": "date",
-      "description": "ISO 8601 date of last update"
-    },
-    "license": {
-      "type": "string",
-      "description": "SPDX license identifier",
-      "examples": [
-        "CC0-1.0",
-        "MIT",
-        "Apache-2.0"
-      ]
-    },
-    "maintainer": {
-      "type": "string",
-      "description": "Protocol maintainer or organization"
-    },
-    "definitions": {
+    "constraints": {
       "type": "object",
-      "description": "Optional YAML anchor definitions used by the protocol for token efficiency (not required for agent output validation).",
-      "additionalProperties": true
-    },
-    "metadata": {
-      "$ref": "#/$defs/Metadata"
-    },
-    "quick_start": {
-      "$ref": "#/$defs/QuickStart"
-    },
-    "audience": {
-      "$ref": "#/$defs/Audience"
-    },
-    "assumptions": {
-      "$ref": "#/$defs/Assumptions"
-    },
-    "agent_architecture": {
-      "$ref": "#/$defs/AgentArchitecture"
-    },
-    "tool_contracts": {
-      "$ref": "#/$defs/ToolContracts"
-    },
-    "priorities": {
-      "$ref": "#/$defs/Priorities"
-    },
-    "guardrails": {
-      "$ref": "#/$defs/Guardrails"
-    },
-    "evaluation": {
-      "$ref": "#/$defs/Evaluation"
-    },
-    "phases": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "$ref": "#/$defs/Phase"
+      "properties": {
+        "time_budget_minutes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_files": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "risk_tolerance": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
       },
-      "description": "Ordered list of execution phases"
+      "required": [
+        "time_budget_minutes",
+        "max_files",
+        "risk_tolerance"
+      ]
     },
-    "commit_protocol": {
-      "$ref": "#/$defs/CommitProtocol"
+    "selected_for_escalation": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
-    "change_management": {
-      "$ref": "#/$defs/ChangeManagement"
-    },
-    "error_handling": {
-      "$ref": "#/$defs/ErrorHandling"
-    },
-    "monorepo": {
-      "$ref": "#/$defs/MonorepoSupport"
-    },
-    "scaling": {
-      "$ref": "#/$defs/ScalingRules"
-    },
-    "verification_commands": {
-      "$ref": "#/$defs/VerificationCommands"
-    },
-    "troubleshooting": {
-      "$ref": "#/$defs/Troubleshooting"
-    },
-    "advanced_features": {
-      "$ref": "#/$defs/AdvancedFeatures"
-    },
-    "notes": {
-      "$ref": "#/$defs/Notes"
+    "requires_explicit_override": {
+      "type": "boolean"
     }
   },
-  "additionalProperties": false,
+  "required": [
+    "constraints",
+    "selected_for_escalation",
+    "requires_explicit_override"
+  ],
   "$defs": {
     "Metadata": {
       "type": "object",
@@ -2172,12 +2098,6 @@
         },
         "details": {
           "type": "string"
-        },
-        "tool": {
-          "type": [
-            "string",
-            "null"
-          ]
         }
       },
       "additionalProperties": false
@@ -2575,54 +2495,6 @@
         },
         "risk_assessment": {
           "type": "string"
-        }
-      },
-      "additionalProperties": false
-    },
-    "PlanState": {
-      "title": "Plan State",
-      "description": "Skill-RUP planning sidecar: constraints, escalations, and override flags that extend but do not alter the canonical PlanOutput contract.",
-      "type": "object",
-      "required": [
-        "constraints",
-        "selected_for_escalation",
-        "requires_explicit_override"
-      ],
-      "properties": {
-        "constraints": {
-          "type": "object",
-          "required": [
-            "time_budget_minutes",
-            "max_files",
-            "risk_tolerance"
-          ],
-          "properties": {
-            "time_budget_minutes": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "max_files": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "risk_tolerance": {
-              "type": "string",
-              "enum": [
-                "low",
-                "medium",
-                "high"
-              ]
-            }
-          }
-        },
-        "selected_for_escalation": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "requires_explicit_override": {
-          "type": "boolean"
         }
       },
       "additionalProperties": false

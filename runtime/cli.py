@@ -21,12 +21,13 @@ def run_discovery(
     state_dir: Optional[Path] = None,
     run_id: Optional[str] = None,
     state: Optional[StateManager] = None,
+    resume: bool = False,
 ):
     if state is not None:
         paths = state.paths
     else:
         paths = RupPaths(target_dir, state_dir=state_dir)
-        state = StateManager(paths, run_id=run_id)
+        state = StateManager(paths, run_id=run_id, resume=resume)
     builder = ArtifactBuilder(paths, state=state)
     print(f"[RUP] Starting Discovery on {target_dir.resolve()} (Run ID: {state.run_id})...")
     phase = DiscoveryPhase(target_dir, state, builder)
@@ -43,12 +44,13 @@ def run_plan(
     max_files: int = 20,
     risk_tolerance: str = "medium",
     state: Optional[StateManager] = None,
+    resume: bool = False,
 ):
     if state is not None:
         paths = state.paths
     else:
         paths = RupPaths(target_dir, state_dir=state_dir)
-        state = StateManager(paths, run_id=run_id)
+        state = StateManager(paths, run_id=run_id, resume=resume)
     builder = ArtifactBuilder(paths, state=state)
     print(f"[RUP] Starting Planning (Budget: {time_budget}m, Tolerance: {risk_tolerance})...")
     phase = PlanningPhase(
@@ -69,12 +71,13 @@ def run_execute(
     state_dir: Optional[Path] = None,
     run_id: Optional[str] = None,
     state: Optional[StateManager] = None,
+    resume: bool = False,
 ):
     if state is not None:
         paths = state.paths
     else:
         paths = RupPaths(target_dir, state_dir=state_dir)
-        state = StateManager(paths, run_id=run_id)
+        state = StateManager(paths, run_id=run_id, resume=resume)
     builder = ArtifactBuilder(paths, state=state)
     print(f"[RUP] Starting Execution...")
     phase = ExecutionPhase(target_dir, state, builder)
@@ -90,12 +93,13 @@ def run_verify(
     strict: bool = False,
     risk_tolerance: str = "medium",
     state: Optional[StateManager] = None,
+    resume: bool = False,
 ) -> bool:
     if state is not None:
         paths = state.paths
     else:
         paths = RupPaths(target_dir, state_dir=state_dir)
-        state = StateManager(paths, run_id=run_id)
+        state = StateManager(paths, run_id=run_id, resume=resume)
     builder = ArtifactBuilder(paths, state=state)
     effective_strict = strict or risk_tolerance == "low"
     print(f"[RUP] Starting Multi-Gate Verification (strict={effective_strict})...")
@@ -122,12 +126,13 @@ def run_report(
     state_dir: Optional[Path] = None,
     run_id: Optional[str] = None,
     state: Optional[StateManager] = None,
+    resume: bool = False,
 ):
     if state is not None:
         paths = state.paths
     else:
         paths = RupPaths(target_dir, state_dir=state_dir)
-        state = StateManager(paths, run_id=run_id)
+        state = StateManager(paths, run_id=run_id, resume=resume)
     builder = ArtifactBuilder(paths, state=state)
     print(f"[RUP] Generating Final Report...")
     phase = ReportingPhase(target_dir, state, builder)
@@ -153,19 +158,39 @@ def run_full_lifecycle(
     time_budget: int = 45,
     max_files: int = 20,
     risk_tolerance: str = "medium",
-    strict: bool = False
+    strict: bool = False,
+    override_escalation: bool = False,
 ) -> int:
     """Execute complete 4-phase RUP lifecycle."""
     paths = RupPaths(target_dir, state_dir=state_dir)
-    state = StateManager(paths)
+    # A full lifecycle always starts fresh; it must never silently resume a
+    # completed or partially-completed previous run.
+    state = StateManager(paths, resume=False)
 
     run_discovery(target_dir, state=state)
-    run_plan(target_dir, time_budget=time_budget, max_files=max_files, risk_tolerance=risk_tolerance, state=state)
+    plan_data = run_plan(
+        target_dir,
+        time_budget=time_budget,
+        max_files=max_files,
+        risk_tolerance=risk_tolerance,
+        state=state,
+    )
+
+    plan_state = state.load_json("plan-state.json")
+    if plan_state.get("requires_explicit_override") and not override_escalation:
+        print(
+            "[RUP] Planning produced escalations that require explicit override. "
+            "Use --override-escalation to continue.",
+            file=sys.stderr,
+        )
+        return 1
+
     run_execute(target_dir, state=state)
     passed = run_verify(target_dir, strict=strict, risk_tolerance=risk_tolerance, state=state)
-    run_report(target_dir, state=state)
+    report = run_report(target_dir, state=state)
 
-    return 0 if passed else 1
+    ready = report.get("summary", {}).get("ready_for_submission", False)
+    return 0 if (passed and ready) else 1
 
 def main():
     parser = argparse.ArgumentParser(description=f"Skill-RUP CLI (Runtime v{__version__}, Protocol v{__protocol_version__})")
@@ -176,6 +201,8 @@ def main():
     parser.add_argument("--max-files", type=int, default=20, help="Max files to modify per run")
     parser.add_argument("--risk-tolerance", choices=["low", "medium", "high"], default="medium", help="Risk tolerance for planning")
     parser.add_argument("--strict", action="store_true", help="Fail verification on warnings or skipped gates")
+    parser.add_argument("--resume", action="store_true", help="Resume an existing session (phase-only commands)")
+    parser.add_argument("--override-escalation", action="store_true", help="Continue a full lifecycle even when P0 items are escalated")
     parser.add_argument("--version", action="version", version=f"Skill-RUP v{__version__} (Protocol v{__protocol_version__})")
 
     args = parser.parse_args()
@@ -193,31 +220,34 @@ def main():
                 time_budget=args.time_budget,
                 max_files=args.max_files,
                 risk_tolerance=args.risk_tolerance,
-                strict=args.strict
+                strict=args.strict,
+                override_escalation=args.override_escalation,
             )
         elif args.phase == "discovery":
-            run_discovery(args.target, state_dir=args.state_dir)
+            run_discovery(args.target, state_dir=args.state_dir, resume=args.resume)
         elif args.phase == "plan":
             run_plan(
                 args.target,
                 state_dir=args.state_dir,
                 time_budget=args.time_budget,
                 max_files=args.max_files,
-                risk_tolerance=args.risk_tolerance
+                risk_tolerance=args.risk_tolerance,
+                resume=args.resume,
             )
         elif args.phase == "execute":
-            run_execute(args.target, state_dir=args.state_dir)
+            run_execute(args.target, state_dir=args.state_dir, resume=args.resume)
         elif args.phase == "verify":
             if not run_verify(
                 args.target,
                 state_dir=args.state_dir,
                 strict=args.strict,
                 risk_tolerance=args.risk_tolerance,
+                resume=args.resume,
             ):
                 print("[RUP] Verification failed.", file=sys.stderr)
                 return 1
         elif args.phase == "report":
-            run_report(args.target, state_dir=args.state_dir)
+            run_report(args.target, state_dir=args.state_dir, resume=args.resume)
         elif args.phase == "migrate":
             run_migrate(args.target, state_dir=args.state_dir)
     except Exception as e:

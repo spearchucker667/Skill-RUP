@@ -395,36 +395,38 @@ def verify_transfer_manifest(
     checked = 0
     passed = 0
 
-    for transfer in transfer_manifest.get("transfers", []):
+    transfers = transfer_manifest.get("transfers", [])
+    recorded_source_paths = {t["source_path"] for t in transfers}
+    upstream_paths = set(upstream_tree.keys())
+
+    # Full coverage: every upstream path must be accounted for and no phantom
+    # source paths may appear in the manifest.
+    for missing in upstream_paths - recorded_source_paths:
+        failures.append(
+            {
+                "source_path": missing,
+                "reason": "Upstream path missing from transfer manifest",
+            }
+        )
+    for extra in recorded_source_paths - upstream_paths:
+        failures.append(
+            {
+                "source_path": extra,
+                "reason": "Transfer manifest contains path not in upstream tree",
+            }
+        )
+
+    for transfer in transfers:
         destination_path = transfer.get("destination_path")
         source_path = transfer["source_path"]
-        if destination_path is None:
-            continue
-
-        checked += 1
-        dest_file = skill_root / destination_path
-        if not dest_file.exists():
-            failures.append(
-                {
-                    "source_path": source_path,
-                    "destination_path": destination_path,
-                    "reason": "Destination file is missing",
-                }
-            )
-            continue
-
+        recorded_source_blob = transfer.get("source_git_blob_sha")
         expected_source_blob = upstream_tree.get(source_path)
-        recorded_source_blob = transfer["source_git_blob_sha"]
+
         if expected_source_blob is None:
-            failures.append(
-                {
-                    "source_path": source_path,
-                    "destination_path": destination_path,
-                    "reason": "Source path not found in reconstructed upstream tree",
-                }
-            )
+            # Already recorded as a coverage failure above.
             continue
-        if expected_source_blob != recorded_source_blob:
+
+        if recorded_source_blob != expected_source_blob:
             failures.append(
                 {
                     "source_path": source_path,
@@ -433,6 +435,24 @@ def verify_transfer_manifest(
                         f"Recorded source git blob {recorded_source_blob} does not "
                         f"match reconstructed upstream blob {expected_source_blob}"
                     ),
+                }
+            )
+            continue
+
+        # Source identity is verified for omitted records as well as transferred
+        # records; an omitted upstream file must still be the file we think it is.
+        checked += 1
+        if destination_path is None:
+            passed += 1
+            continue
+
+        dest_file = skill_root / destination_path
+        if not dest_file.exists():
+            failures.append(
+                {
+                    "source_path": source_path,
+                    "destination_path": destination_path,
+                    "reason": "Destination file is missing",
                 }
             )
             continue

@@ -7,6 +7,7 @@ import sys
 import json
 import difflib
 import argparse
+import copy
 from pathlib import Path
 
 SCHEMA_DEFINITIONS = {
@@ -26,7 +27,6 @@ SCHEMA_DEFINITIONS = {
         "title": "Plan Output Schema",
         "type": "object",
         "properties": {
-            "constraints": {"type": "object"},
             "backlog": {"type": "array", "items": {"$ref": "#/$defs/BacklogItem"}},
             "selected_items": {"type": "array", "items": {"type": "string"}},
             "execution_order": {"type": "array", "items": {"type": "string"}},
@@ -35,6 +35,24 @@ SCHEMA_DEFINITIONS = {
             "estimated_effort": {"type": "object"}
         },
         "required": ["backlog", "selected_items", "execution_order", "risk_analysis"]
+    },
+    "plan-state": {
+        "title": "Plan State Schema",
+        "type": "object",
+        "properties": {
+            "constraints": {
+                "type": "object",
+                "properties": {
+                    "time_budget_minutes": {"type": "integer", "minimum": 1},
+                    "max_files": {"type": "integer", "minimum": 1},
+                    "risk_tolerance": {"type": "string", "enum": ["low", "medium", "high"]}
+                },
+                "required": ["time_budget_minutes", "max_files", "risk_tolerance"]
+            },
+            "selected_for_escalation": {"type": "array", "items": {"type": "string"}},
+            "requires_explicit_override": {"type": "boolean"}
+        },
+        "required": ["constraints", "selected_for_escalation", "requires_explicit_override"]
     },
     "execution": {
         "title": "Execution Output Schema",
@@ -160,6 +178,51 @@ SCHEMA_DEFINITIONS = {
     }
 }
 
+# Skill-only definitions that extend the canonical schema without modifying it.
+PLAN_STATE_DEF = {
+    "title": "Plan State",
+    "description": "Skill-RUP planning sidecar: constraints, escalations, and override flags that extend but do not alter the canonical PlanOutput contract.",
+    "type": "object",
+    "required": ["constraints", "selected_for_escalation", "requires_explicit_override"],
+    "properties": {
+        "constraints": {
+            "type": "object",
+            "required": ["time_budget_minutes", "max_files", "risk_tolerance"],
+            "properties": {
+                "time_budget_minutes": {"type": "integer", "minimum": 1},
+                "max_files": {"type": "integer", "minimum": 1},
+                "risk_tolerance": {"type": "string", "enum": ["low", "medium", "high"]}
+            }
+        },
+        "selected_for_escalation": {"type": "array", "items": {"type": "string"}},
+        "requires_explicit_override": {"type": "boolean"}
+    },
+    "additionalProperties": False
+}
+
+
+def _build_derived_schema(canonical: dict) -> dict:
+    """Create the Skill-RUP derived umbrella schema from the canonical schema.
+
+    The derived schema keeps the canonical $defs intact and adds Skill-only
+    extensions (``PlanState`` and per-result tool metadata) so the canonical
+    file can remain a byte-for-byte upstream copy.
+    """
+    derived = copy.deepcopy(canonical)
+    derived["$id"] = "https://spearchucker667.github.io/RUP/schemas/rup-schema-derived.schema.json"
+    derived["title"] = "RUP Protocol Schema — Skill-RUP Derived Runtime Contract"
+    derived["description"] = (
+        "Skill-RUP runtime artifact contract. Extends the canonical upstream "
+        "schema with sidecars and runtime-only metadata while keeping canonical "
+        "output definitions compatible with protocol/rup-schema.json."
+    )
+    derived["$defs"]["PlanState"] = PLAN_STATE_DEF
+    vr = derived["$defs"].get("VerificationResult", {})
+    if "properties" in vr:
+        vr["properties"]["tool"] = {"type": ["string", "null"]}
+    return derived
+
+
 def _atomic_write(path: Path, content: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(content, encoding="utf-8")
@@ -212,6 +275,31 @@ def main():
                 mismatches.append(f"Schema mismatch for {s_name}:\n{diff}")
         else:
             _atomic_write(schema_path, expected)
+
+    # Generate/check the Skill-RUP derived umbrella schema.
+    derived_schema_path = sch_dir / "rup-schema-derived.schema.json"
+    if canonical_schema_path.exists():
+        with open(canonical_schema_path, "r", encoding="utf-8") as f:
+            canonical = json.load(f)
+        derived_expected = _build_derived_schema(canonical)
+        derived_text = json.dumps(derived_expected, indent=2, sort_keys=False) + "\n"
+        if args.check:
+            if not derived_schema_path.exists():
+                missing_schemas.append("rup-schema-derived.schema.json")
+            else:
+                actual = derived_schema_path.read_text(encoding="utf-8")
+                if actual != derived_text:
+                    diff = "".join(
+                        difflib.unified_diff(
+                            actual.splitlines(keepends=True),
+                            derived_text.splitlines(keepends=True),
+                            fromfile=str(derived_schema_path),
+                            tofile=f"{derived_schema_path} (generated)",
+                        )
+                    )
+                    mismatches.append(f"Schema mismatch for rup-schema-derived:\n{diff}")
+        else:
+            _atomic_write(derived_schema_path, derived_text)
 
     if args.check:
         if missing_schemas:

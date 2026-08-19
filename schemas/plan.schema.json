@@ -4,9 +4,6 @@
   "title": "Plan Output Schema",
   "type": "object",
   "properties": {
-    "constraints": {
-      "type": "object"
-    },
     "backlog": {
       "type": "array",
       "items": {

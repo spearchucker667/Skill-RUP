@@ -212,3 +212,57 @@ def test_reporting_includes_readiness_debt_deltas_and_completed_count(tmp_path):
     assert "debt_delta" in metrics
     assert report["summary"]["total_items_processed"] == 1
     assert "reporting" in report["phases_completed"]
+
+
+def test_missing_execution_state_blocks_readiness(tmp_path):
+    """RUP-REPORT-005: missing execution-state.json makes selected items incomplete."""
+    repo = tmp_path / "missing_state_repo"
+    repo.mkdir()
+
+    phase = _write_phase_states(
+        repo,
+        selected_items=["BUG-001"],
+        verification_status="passed",
+        execution_state=None,
+    )
+    report = phase.execute()
+
+    assert report["summary"]["ready_for_submission"] is False
+    assert any(f["id"] == "BUG-001" and f["reason"] == "incomplete" for f in report["followups"])
+
+
+def test_escalated_items_block_readiness(tmp_path):
+    """RUP-REPORT-006: escalated P0 items must block submission."""
+    repo = tmp_path / "escalated_repo"
+    repo.mkdir()
+
+    phase = _write_phase_states(
+        repo,
+        selected_items=[],
+        verification_status="passed",
+        execution_state={
+            "recommendations": [],
+            "dispositions": {},
+            "per_item_completion": {},
+            "rollback_operations": [],
+        },
+    )
+    # Inject an escalated item into the plan state sidecar.
+    plan = phase.state_manager.load_json("RUP_PLAN.json")
+    plan["backlog"].append({
+        "id": "BUG-001",
+        "priority": "P0",
+        "title": "Big bug",
+        "category": "bugs",
+        "estimated_effort_minutes": 30,
+    })
+    phase.state_manager.save_json(plan, "RUP_PLAN.json")
+
+    plan_state = phase.state_manager.load_json("plan-state.json") or {}
+    plan_state["selected_for_escalation"] = ["BUG-001"]
+    phase.state_manager.save_json(plan_state, "plan-state.json")
+
+    report = phase.execute()
+
+    assert report["summary"]["ready_for_submission"] is False
+    assert any(f["id"] == "BUG-001" and f["reason"] == "escalated" for f in report["followups"])

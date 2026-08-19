@@ -251,12 +251,12 @@ class PlanningPhase:
             "risk_tolerance": self.risk_tolerance,
         }
 
+        # Canonical RUP_PLAN.json contains only the upstream PlanOutput contract.
+        # Skill-only planning metadata (constraints, escalations, override flag)
+        # lives in plan-state.json so the canonical artifact remains byte-compatible.
         plan_data = {
-            "constraints": constraints,
             "backlog": backlog,
             "selected_items": selected_ids,
-            "selected_for_escalation": selection["selected_for_escalation"],
-            "requires_explicit_override": selection["requires_explicit_override"],
             "execution_order": execution_order,
             "risk_analysis": risk_analysis,
             "estimated_effort": {
@@ -266,11 +266,20 @@ class PlanningPhase:
             }
         }
 
+        plan_state = {
+            "constraints": constraints,
+            "selected_for_escalation": selection["selected_for_escalation"],
+            "requires_explicit_override": selection["requires_explicit_override"],
+        }
+
         # Save machine-readable state atomically
         self.state_manager.save_json(plan_data, "RUP_PLAN.json")
+        self.state_manager.save_json(plan_state, "plan-state.json")
 
-        # Build human-readable markdown matching canonical template
-        self.artifact_builder.build_markdown("plan.md", plan_data, "RUP_PLAN.md")
+        # Build human-readable markdown matching canonical template; the markdown
+        # renderer expects constraints alongside the canonical plan fields.
+        render_data = {**plan_data, **plan_state}
+        self.artifact_builder.build_markdown("plan.md", render_data, "RUP_PLAN.md")
 
         return plan_data
 

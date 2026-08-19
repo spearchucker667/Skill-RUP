@@ -227,6 +227,49 @@ def test_verify_transfer_manifest_fails_on_tampered_destination(
     assert "protocol/rup-protocol.yaml" in failure_paths
 
 
+def test_verify_transfer_manifest_checks_omitted_source_blob(
+    skill_root: Path, upstream_repo: Path
+):
+    """RUP-PROV-001: omitted upstream paths must still match recorded source blobs."""
+    canonical = build_canonical_source_manifest(skill_root, upstream_repo)
+    transfer = build_transfer_manifest(skill_root, canonical)
+
+    # Corrupt the recorded source blob of an omitted file.
+    for t in transfer["transfers"]:
+        if t["destination_path"] is None:
+            t["source_git_blob_sha"] = "0" * 40
+            break
+
+    report = verify_transfer_manifest(skill_root, transfer, upstream_repo)
+    assert report["valid"] is False
+    assert any(
+        f["reason"].startswith("Recorded source git blob")
+        for f in report["failures"]
+    )
+
+
+def test_verify_transfer_manifest_requires_full_upstream_coverage(
+    skill_root: Path, upstream_repo: Path
+):
+    """RUP-PROV-002: the transfer manifest must account for every upstream path."""
+    canonical = build_canonical_source_manifest(skill_root, upstream_repo)
+    transfer = build_transfer_manifest(skill_root, canonical)
+
+    # Drop one transfer record.
+    transfer["transfers"] = [
+        t for t in transfer["transfers"]
+        if t["source_path"] != "foreign/boilerplate.md"
+    ]
+
+    report = verify_transfer_manifest(skill_root, transfer, upstream_repo)
+    assert report["valid"] is False
+    assert any(
+        f["source_path"] == "foreign/boilerplate.md"
+        and "missing from transfer manifest" in f["reason"]
+        for f in report["failures"]
+    )
+
+
 def test_provenance_manager_verify_against_canonical_commit(
     skill_root: Path, upstream_repo: Path
 ):

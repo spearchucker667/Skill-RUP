@@ -29,8 +29,26 @@ def test_verify_execution(tmp_path):
     assert result.returncode == 0, f"Schema validation failed: {result.stdout} {result.stderr}"
 
 
-def test_verify_run_id_is_deterministic(tmp_path):
-    """RUP-VERIFY-009: run IDs are deterministic across independent phase invocations."""
+def test_verify_run_id_is_preserved_with_resume(tmp_path):
+    """RUP-VERIFY-009: run IDs persist across phase-only invocations when --resume is used."""
+    repo_dir = tmp_path / "mock_repo"
+    repo_dir.mkdir()
+    (repo_dir / "main.py").write_text("print('hello')")
+
+    run_discovery(repo_dir)
+    discovery_state = StateManager(RupPaths(repo_dir)).load_json("session-state.json")
+
+    run_plan(repo_dir, resume=True)
+    run_execute(repo_dir, resume=True)
+    run_verify(repo_dir, resume=True)
+    verify_state = StateManager(RupPaths(repo_dir)).load_json("session-state.json")
+
+    assert discovery_state["run_id"] == verify_state["run_id"]
+    assert discovery_state["run_id"].startswith("rup-")
+
+
+def test_verify_run_id_is_unique_without_resume(tmp_path):
+    """RUP-VERIFY-010: phase-only invocations without --resume receive distinct run IDs."""
     repo_dir = tmp_path / "mock_repo"
     repo_dir.mkdir()
     (repo_dir / "main.py").write_text("print('hello')")
@@ -43,5 +61,4 @@ def test_verify_run_id_is_deterministic(tmp_path):
     run_verify(repo_dir)
     verify_state = StateManager(RupPaths(repo_dir)).load_json("session-state.json")
 
-    assert discovery_state["run_id"] == verify_state["run_id"]
-    assert discovery_state["run_id"].startswith("rup-")
+    assert discovery_state["run_id"] != verify_state["run_id"]

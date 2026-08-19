@@ -299,7 +299,44 @@ def test_generate_and_save_manifest_rebuilds_full_ledger(tmp_path):
     for name in lifecycle_artifacts:
         assert name in artifact_names, f"{name} missing from manifest artifacts"
     assert "run-manifest.json" not in artifact_names
+    assert "run-manifest.json.sha256" not in artifact_names
     assert (state_dir / "run-manifest.json.sha256").exists()
 
     loaded = state.load_json("run-manifest.json")
     assert loaded["artifacts"] == manifest["artifacts"]
+
+
+def test_resume_recovers_existing_run_id(tmp_path):
+    """StateManager(resume=True) must reuse the run_id from session-state.json."""
+    paths = RupPaths(tmp_path)
+    original = StateManager(paths)
+    original.update_session_state("discovery")
+
+    resumed = StateManager(paths, resume=True)
+    assert resumed.run_id == original.run_id
+
+
+def test_second_lifecycle_does_not_leak_old_checksum_into_manifest(tmp_path):
+    """A new lifecycle's manifest must not include the previous run's checksum sidecar."""
+    paths = RupPaths(tmp_path)
+
+    state1 = StateManager(paths)
+    state1.save_json({"phase": "discovery"}, "RUP_DISCOVERY.json")
+    state1.generate_and_save_manifest(
+        phases_completed=["discovery"],
+        selected_items=[],
+        execution_changes_count=0,
+        verification_status="pending",
+    )
+
+    state2 = StateManager(paths)
+    state2.save_json({"phase": "discovery"}, "RUP_DISCOVERY.json")
+    manifest2 = state2.generate_and_save_manifest(
+        phases_completed=["discovery"],
+        selected_items=[],
+        execution_changes_count=0,
+        verification_status="pending",
+    )
+
+    artifact_names = {a["name"] for a in manifest2["artifacts"]}
+    assert "run-manifest.json.sha256" not in artifact_names

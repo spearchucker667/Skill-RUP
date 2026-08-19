@@ -640,3 +640,66 @@ def test_execution_state_persists_dispositions_and_recommendations(tmp_path):
     assert any(r["disposition"] == "AGENT_ONLY" for r in state["recommendations"])
     assert state["per_item_completion"]["BUG-001"] == "AGENT_ONLY"
     assert "rollback_operations" in state
+
+
+def test_ci_generator_uses_detected_package_manager(tmp_path):
+    """RUP-EXEC-008: JS CI generation must use detected pnpm/yarn/npm commands."""
+    repo = tmp_path / "js_repo"
+    repo.mkdir()
+    _init_git(repo)
+    (repo / "package.json").write_text('{"scripts": {"test": "vitest"}}', encoding="utf-8")
+    (repo / "pnpm-lock.yaml").write_text("", encoding="utf-8")
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[{
+            "id": "CI-001",
+            "category": "ci",
+            "title": "Add CI",
+            "acceptance_criteria": [],
+            "risk": "low",
+        }],
+        selected_items=["CI-001"],
+    )
+    # Tell the detector this is a JS repo using pnpm.
+    discovery = phase.state_manager.load_json("RUP_DISCOVERY.json")
+    discovery["repo_metadata"]["primary_language"] = "typescript"
+    phase.state_manager.save_json(discovery, "RUP_DISCOVERY.json")
+
+    phase.execute()
+
+    ci_yml = repo / ".github" / "workflows" / "ci.yml"
+    assert ci_yml.exists()
+    content = ci_yml.read_text(encoding="utf-8")
+    assert "pnpm install --frozen-lockfile" in content
+    assert "pnpm test" in content
+
+
+def test_ci_generator_agent_only_for_unsupported_language(tmp_path):
+    """RUP-EXEC-009: unsupported primary languages must not emit a Python workflow."""
+    repo = tmp_path / "kotlin_repo"
+    repo.mkdir()
+    _init_git(repo)
+    (repo / "build.gradle.kts").write_text("", encoding="utf-8")
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[{
+            "id": "CI-001",
+            "category": "ci",
+            "title": "Add CI",
+            "acceptance_criteria": [],
+            "risk": "low",
+        }],
+        selected_items=["CI-001"],
+    )
+    discovery = phase.state_manager.load_json("RUP_DISCOVERY.json")
+    discovery["repo_metadata"]["primary_language"] = "kotlin"
+    phase.state_manager.save_json(discovery, "RUP_DISCOVERY.json")
+
+    data = phase.execute()
+
+    assert not (repo / ".github" / "workflows" / "ci.yml").exists()
+    rec = data["recommendations"][0]
+    assert rec["disposition"] == "AGENT_ONLY"
+    assert "kotlin" in rec["rationale"].lower()

@@ -428,10 +428,18 @@ def cmd_validate_output(args: argparse.Namespace) -> int:
 
 
 def _derived_schema_name(fname_lower: str) -> Optional[str]:
-    """Map a JSON artifact filename to its derived schema name, if known."""
+    """Map a JSON artifact filename to its derived schema name, if known.
+
+    Exact derived artifacts are classified before any fuzzy canonical-output
+    matching so that files such as ``execution-state.json`` are validated
+    against their dedicated derived schema rather than being misidentified as
+    canonical ``ExecutionOutput`` artifacts.
+    """
     exact_map = {
         "run-manifest.json": "run-manifest",
         "session-state.json": "session-state",
+        "execution-state.json": "execution-state",
+        "plan-state.json": "plan-state",
         "rup_final_report.json": "final-report",
     }
     if fname_lower in exact_map:
@@ -509,6 +517,29 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
 
         # Validate output JSON files
         if fname_lower.endswith(".json"):
+            # Derived artifacts must be classified before fuzzy canonical-output
+            # matching. Files such as ``execution-state.json`` contain the
+            # substring ``execution`` but are Skill-only sidecars, not canonical
+            # ``ExecutionOutput`` artifacts.
+            derived_name = _derived_schema_name(fname_lower)
+            if derived_name and derived_name in derived_schemas:
+                seen_files.add(resolved_str)
+                try:
+                    output = load_json(file_path)
+                    valid, errors = _validate_derived(output, derived_name, derived_schemas)
+                    results.append((file_path, valid, errors))
+                except Exception as e:
+                    print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {_display_path(file_path)}: {e}")
+                    parse_errors += 1
+                continue
+
+            if derived_name and derived_name not in derived_schemas:
+                print(
+                    f"{colorize('Warning:', Colors.YELLOW)} "
+                    f"Derived schema missing for {_display_path(file_path)} (expected {derived_name}.schema.json)"
+                )
+                parse_errors += 1
+
             output_type = None
             if "discovery" in fname_lower:
                 output_type = "discovery"
@@ -531,27 +562,6 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
                     print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {_display_path(file_path)}: {e}")
                     parse_errors += 1
                 continue
-
-            # Validate derived artifacts (run-manifest, session-state,
-            # final-report, rollback, handoff) against schemas/*.schema.json.
-            derived_name = _derived_schema_name(fname_lower)
-            if derived_name and derived_name in derived_schemas:
-                seen_files.add(resolved_str)
-                try:
-                    output = load_json(file_path)
-                    valid, errors = _validate_derived(output, derived_name, derived_schemas)
-                    results.append((file_path, valid, errors))
-                except Exception as e:
-                    print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {_display_path(file_path)}: {e}")
-                    parse_errors += 1
-                continue
-
-            if derived_name and derived_name not in derived_schemas:
-                print(
-                    f"{colorize('Warning:', Colors.YELLOW)} "
-                    f"Derived schema missing for {_display_path(file_path)} (expected {derived_name}.schema.json)"
-                )
-                parse_errors += 1
 
     # Print results
     if not results:
