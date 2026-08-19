@@ -100,6 +100,42 @@ SCHEMA_DEFINITIONS = {
         },
         "required": ["run_id", "current_phase", "timestamp"]
     },
+    "execution-state": {
+        "title": "Execution State Schema",
+        "type": "object",
+        "properties": {
+            "recommendations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "backlog_item_id": {"type": "string"},
+                        "subtype": {"type": "string"},
+                        "disposition": {
+                            "type": "string",
+                            "enum": ["AGENT_ONLY", "PARTIAL", "NOT_PORTED", "COMPLETE"]
+                        },
+                        "rationale": {"type": "string"}
+                    },
+                    "required": ["backlog_item_id", "subtype", "disposition", "rationale"]
+                }
+            },
+            "dispositions": {"type": "object", "additionalProperties": {"type": "string"}},
+            "per_item_completion": {"type": "object", "additionalProperties": {"type": "string"}},
+            "rollback_operations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "op": {"type": "string"},
+                        "argv": {"type": "array", "items": {"type": "string"}}
+                    },
+                    "required": ["op", "argv"]
+                }
+            }
+        },
+        "required": ["recommendations", "dispositions", "per_item_completion", "rollback_operations"]
+    },
     "capability-lineage": {
         "title": "Capability Lineage Schema",
         "type": "array",

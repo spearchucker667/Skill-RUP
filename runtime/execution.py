@@ -12,6 +12,7 @@ Implements canonical Phase 3 Execution per RUP-EXEC-001..007:
 """
 import json
 import os
+import shlex
 import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -134,6 +135,23 @@ class ExecutionPhase:
         if category == "bugs":
             return False
         return False
+
+    @staticmethod
+    def _resolve_completion(
+        item_changes: List[Dict[str, Any]], item_recommendations: List[Dict[str, Any]]
+    ) -> str:
+        """Determine the completion disposition for a single backlog item.
+
+        AGENT_ONLY > NOT_PORTED > PARTIAL > COMPLETE so that any blocker is
+        visible in downstream reporting.
+        """
+        rank = {"COMPLETE": 0, "PARTIAL": 1, "NOT_PORTED": 2, "AGENT_ONLY": 3}
+        best = "COMPLETE" if item_changes else "NOT_PORTED"
+        for rec in item_recommendations:
+            disp = rec.get("disposition", "AGENT_ONLY")
+            if rank.get(disp, 0) > rank.get(best, 0):
+                best = disp
+        return best
 
     @staticmethod
     def _item_subtype(item: Dict[str, Any]) -> str:
@@ -939,21 +957,51 @@ public issue for security-sensitive findings.
                     }
                 )
 
+        operations: List[Dict[str, Any]] = []
         commands: List[str] = [
             "# Rollback commands for RUP-generated changes",
         ]
+
+        def _add_op(op: str, argv: List[str], shell: str) -> None:
+            operations.append({"op": op, "argv": argv})
+            commands.append(shell)
+
         for path in created:
-            commands.append(f"rm '{path}'")
+            _add_op(
+                "rm",
+                ["rm", "-f", "--", path],
+                " ".join(["rm", "-f", "--", shlex.quote(path)]),
+            )
         for path in modified:
-            commands.append(f"git checkout -- '{path}'")
+            _add_op(
+                "git-checkout",
+                ["git", "checkout", "--", path],
+                " ".join(["git", "checkout", "--", shlex.quote(path)]),
+            )
         for path in deleted:
-            commands.append(f"git checkout HEAD -- '{path}'")
+            _add_op(
+                "git-restore",
+                ["git", "checkout", "HEAD", "--", path],
+                " ".join(["git", "checkout", "HEAD", "--", shlex.quote(path)]),
+            )
         for entry in renamed:
-            commands.append(
-                f"git mv '{entry['new_path']}' '{entry['old_path']}'"
+            new_path = entry["new_path"]
+            old_path = entry["old_path"]
+            _add_op(
+                "git-mv",
+                ["git", "mv", "--", new_path, old_path],
+                " ".join(["git", "mv", "--", shlex.quote(new_path), shlex.quote(old_path)]),
             )
         for path in config_changed:
-            commands.append(f"git checkout -- '{path}'")
+            _add_op(
+                "git-checkout",
+                ["git", "checkout", "--", path],
+                " ".join(["git", "checkout", "--", shlex.quote(path)]),
+            )
+
+        if not operations:
+            operations.append({"op": "none", "argv": ["#", "No changes to revert"]})
+            commands.append("# No changes to revert")
 
         return {
             "created": created,
@@ -962,6 +1010,7 @@ public issue for security-sensitive findings.
             "renamed": renamed,
             "config_changed": config_changed,
             "commands": commands,
+            "operations": operations,
             "baseline_dirty_files": sorted(baseline_paths),
         }
 
@@ -996,35 +1045,39 @@ public issue for security-sensitive findings.
         changes: List[Dict[str, Any]] = []
         recommendations: List[Dict[str, Any]] = []
         changed_files: Set[str] = set()
+        per_item_completion: Dict[str, str] = {}
         for item in ordered_items:
             item_id = item.get("id", "")
             subtype = self._item_subtype(item)
             item_risk_rank = RISK_RANK.get(item.get("risk", "low"), 0)
             if item_risk_rank > tolerance_rank:
-                recommendations.append(
-                    self._recommendation(
-                        item_id,
-                        subtype,
-                        "AGENT_ONLY",
-                        f"Item risk '{item.get('risk')}' exceeds run tolerance '{risk_tolerance}'; "
-                        "manual review required before applying changes.",
-                    )
+                rec = self._recommendation(
+                    item_id,
+                    subtype,
+                    "AGENT_ONLY",
+                    f"Item risk '{item.get('risk')}' exceeds run tolerance '{risk_tolerance}'; "
+                    "manual review required before applying changes.",
                 )
+                recommendations.append(rec)
+                per_item_completion[item_id] = "AGENT_ONLY"
                 continue
             if len(changed_files) >= max_files:
-                recommendations.append(
-                    self._recommendation(
-                        item_id,
-                        subtype,
-                        "AGENT_ONLY",
-                        f"Skipped because max-files limit ({max_files}) has been reached.",
-                    )
+                rec = self._recommendation(
+                    item_id,
+                    subtype,
+                    "AGENT_ONLY",
+                    f"Skipped because max-files limit ({max_files}) has been reached.",
                 )
+                recommendations.append(rec)
+                per_item_completion[item_id] = "AGENT_ONLY"
                 continue
             item_changes, item_recommendations = self._execute_workstream_item(
                 item, discovery_data
             )
             recommendations.extend(item_recommendations)
+            per_item_completion[item_id] = self._resolve_completion(
+                item_changes, item_recommendations
+            )
             for change in item_changes:
                 file_path = change.get("file_path")
                 if file_path and len(changed_files) >= max_files:
@@ -1109,8 +1162,21 @@ public issue for security-sensitive findings.
             "artifacts": [],
         }
 
+        # Skill-only machine state captures dispositions and safe rollback
+        # operations that the canonical execution contract intentionally omits.
+        execution_state: Dict[str, Any] = {
+            "recommendations": recommendations,
+            "dispositions": {
+                rec["backlog_item_id"]: rec["disposition"]
+                for rec in recommendations
+            },
+            "per_item_completion": per_item_completion,
+            "rollback_operations": rollback_procedure.get("operations", []),
+        }
+
         # Save machine-readable state atomically.
         self.state_manager.save_json(schema_execution_data, "RUP_EXECUTION.json")
+        self.state_manager.save_json(execution_state, "execution-state.json")
 
         # Build human-readable markdown matching canonical template.
         self.artifact_builder.build_markdown(

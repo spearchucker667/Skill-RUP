@@ -4,6 +4,7 @@ Unit tests for the RUP execution phase.
 These tests exercise RUP-EXEC-001..007 semantics in isolated temporary
 repositories so they do not depend on the state of the Skill-RUP repository.
 """
+import json
 import subprocess
 from pathlib import Path
 
@@ -604,3 +605,38 @@ def test_recommendations_are_not_file_changes(tmp_path):
     for change in data["changes"]:
         assert change.get("change_type") != "recommendation"
     assert data["recommendations"]
+
+
+def test_execution_state_persists_dispositions_and_recommendations(tmp_path):
+    """RUP-EXEC-008: dispositions and recommendations must survive in machine state."""
+    repo = tmp_path / "disp_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "BUG-001",
+                "category": "bugs",
+                "title": "Bug fix",
+                "acceptance_criteria": [],
+                "risk": "low",
+            }
+        ],
+        selected_items=["BUG-001"],
+    )
+    phase.execute()
+
+    state_path = RupPaths(repo).state_dir / "execution-state.json"
+    assert state_path.exists()
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["recommendations"]
+    assert any(r["disposition"] == "AGENT_ONLY" for r in state["recommendations"])
+    assert state["per_item_completion"]["BUG-001"] == "AGENT_ONLY"
+    assert "rollback_operations" in state
