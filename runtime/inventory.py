@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from collections import defaultdict
 from .command_runner import run_command
+from .security import iter_jailed_files
 
 EXT_TO_LANG = {
     '.py': 'python',
@@ -78,12 +79,9 @@ class InventoryManager:
         self._cached_inventory: Optional[Dict[str, Any]] = None
 
     def _walk_files(self):
-        """Walks files ignoring standard ignore directories."""
+        """Walks files ignoring standard ignore directories and symlink escapes."""
         ignored = {'.git', '.venv', 'venv', 'env', 'node_modules', '__pycache__', 'dist', 'build', '.rup', '.reference', '.pytest_cache'}
-        for root, dirs, files in os.walk(self.target_dir):
-            dirs[:] = [d for d in dirs if d not in ignored]
-            for file in sorted(files):
-                yield Path(root) / file
+        yield from iter_jailed_files(self.target_dir, skip_parts=ignored)
 
     def analyze_inventory(self) -> Dict[str, Any]:
         """Perform a single comprehensive pass over the repository."""
