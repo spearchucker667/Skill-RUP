@@ -16,6 +16,6 @@ All deterministic state is preserved in JSON format conforming to strict JSON Sc
 ## Schema Validation
 At any point, the integrity of an artifact can be validated via `validate_rup.py`:
 ```bash
-python scripts/validate_rup.py schema schemas/discovery.schema.json RUP_DISCOVERY.json
+python scripts/validate_rup.py --schema protocol/rup-schema.json output RUP_DISCOVERY.json discovery
 ```
 Failure to conform to the schema constitutes an automatic pipeline failure in `forward_test.py` and the `validate-skill` GitHub workflow.
