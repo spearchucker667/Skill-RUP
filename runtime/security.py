@@ -2,6 +2,7 @@
 Security module for RUP deterministic runtime.
 Implements adversarial prompt injection defense, path jail enforcement, and safe parsing.
 """
+import os
 import re
 from pathlib import Path
 from typing import List, Dict, Any, Iterator, Optional, Set
@@ -113,4 +114,37 @@ def scan_content_for_threats(content: str) -> List[Dict[str, Any]]:
                 "pattern": pattern.pattern
             })
     return threats
+
+
+def sandbox_available() -> bool:
+    """Return True when the runtime appears to be inside a CI or container sandbox."""
+    if os.environ.get("CI") == "true":
+        return True
+    if Path("/.dockerenv").exists():
+        return True
+    try:
+        cgroup = Path("/proc/self/cgroup").read_text(encoding="utf-8", errors="ignore")
+        if "docker" in cgroup or "containerd" in cgroup:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def scan_target_for_threats(
+    root: Path,
+    max_bytes: int = MAX_FILE_BYTES,
+    skip_parts: Optional[Set[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Statically scan every jailed file under ``root`` for adversarial content."""
+    findings: List[Dict[str, Any]] = []
+    for p in iter_jailed_files(root, max_bytes=max_bytes, skip_parts=skip_parts):
+        try:
+            content = p.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        for threat in scan_content_for_threats(content):
+            threat["file"] = str(p)
+            findings.append(threat)
+    return findings
 
