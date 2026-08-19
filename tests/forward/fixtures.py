@@ -116,6 +116,14 @@ def build_symlink_escape(target_dir: Path) -> None:
     os.symlink("/tmp", target_dir / "escape_link")
 
 
+def build_symlink_file_escape(target_dir: Path) -> None:
+    """Create a fixture with a file symlink pointing outside the repo."""
+    sentinel = target_dir.parent / "external_sentinel.txt"
+    sentinel.write_text("EXTERNAL_SECRET=AKIAIOSFODNN7EXAMPLE\n", encoding="utf-8")
+    _write(target_dir / "README.md", "# repo\n")
+    os.symlink(sentinel, target_dir / "leak.txt")
+
+
 BUILDERS = {
     "python_ok": build_python_ok,
     "node_ok": build_node_ok,
@@ -127,6 +135,7 @@ BUILDERS = {
     "adversarial_state": build_adversarial_state,
     "non_git": build_non_git,
     "symlink_escape": build_symlink_escape,
+    "symlink_file_escape": build_symlink_file_escape,
 }
 
 
