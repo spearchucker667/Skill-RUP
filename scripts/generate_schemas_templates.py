@@ -5,6 +5,7 @@ for Skill-RUP based on canonical RUP Protocol v3.0.0.
 """
 import sys
 import json
+import difflib
 import argparse
 from pathlib import Path
 
@@ -40,7 +41,6 @@ SCHEMA_DEFINITIONS = {
         "type": "object",
         "properties": {
             "changes": {"type": "array", "items": {"$ref": "#/$defs/FileChange"}},
-            "recommendations": {"type": "array", "items": {"$ref": "#/$defs/WorkstreamRecommendation"}},
             "commits": {"type": "array", "items": {"$ref": "#/$defs/Commit"}},
             "local_verification": {"$ref": "#/$defs/LocalVerification"},
             "artifacts": {"type": "array", "items": {"$ref": "#/$defs/Artifact"}}
@@ -111,16 +111,24 @@ SCHEMA_DEFINITIONS = {
                 "title": {"type": "string"},
                 "mandatory": {"type": "boolean"},
                 "port_status": {"type": "string", "enum": ["ported", "incomplete", "unmapped"]},
+                "verification_level": {"type": "string", "enum": ["unverified", "present", "structurally_verified", "runtime_smoke_verified", "behaviorally_verified", "canonical_parity_verified"]},
                 "implementation": {"type": "array", "items": {"type": "string"}},
                 "required_symbols": {"type": "array", "items": {"type": "string"}},
+                "runtime_smoke_tests": {"type": "array", "items": {"type": "string"}},
+                "semantic_tests": {"type": "array", "items": {"type": "string"}},
                 "translation_type": {"type": "string"},
-                "semantic_equivalence": {"type": "string", "enum": ["preserved", "unverified"]},
                 "canonical_source": {"type": "object"}
             },
-            "required": ["id", "port_status", "implementation", "semantic_equivalence"]
+            "required": ["id", "port_status", "verification_level", "implementation", "required_symbols"]
         }
     }
 }
+
+def _atomic_write(path: Path, content: str) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    tmp.replace(path)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Generate/check downstream schemas and templates")
@@ -138,6 +146,7 @@ def main():
             canonical = json.load(f)
             defs = canonical.get("$defs", {})
 
+    mismatches = []
     missing_schemas = []
     for s_name, schema_body in SCHEMA_DEFINITIONS.items():
         schema_path = sch_dir / f"{s_name}.schema.json"
@@ -149,18 +158,34 @@ def main():
         if "$defs" not in schema_content and schema_content.get("type") == "object":
             schema_content["$defs"] = defs
 
+        expected = json.dumps(schema_content, indent=2, sort_keys=False) + "\n"
         if args.check:
             if not schema_path.exists():
                 missing_schemas.append(f"{s_name}.schema.json")
+                continue
+            actual = schema_path.read_text(encoding="utf-8")
+            if actual != expected:
+                diff = "".join(
+                    difflib.unified_diff(
+                        actual.splitlines(keepends=True),
+                        expected.splitlines(keepends=True),
+                        fromfile=str(schema_path),
+                        tofile=f"{schema_path} (generated)",
+                    )
+                )
+                mismatches.append(f"Schema mismatch for {s_name}:\n{diff}")
         else:
-            with open(schema_path, "w", encoding="utf-8") as f:
-                json.dump(schema_content, f, indent=2)
+            _atomic_write(schema_path, expected)
 
     if args.check:
         if missing_schemas:
             print(f"FAILED: Missing schema files: {missing_schemas}", file=sys.stderr)
             return 1
-        print(f"PASS: All {len(SCHEMA_DEFINITIONS)} downstream extension schemas exist and are valid.")
+        if mismatches:
+            for mismatch in mismatches:
+                print(mismatch, file=sys.stderr)
+            return 1
+        print(f"PASS: All {len(SCHEMA_DEFINITIONS)} downstream extension schemas exist and match definitions.")
         return 0
 
     print(f"[RUP] Generated {len(SCHEMA_DEFINITIONS)} downstream JSON schemas in schemas/.")

@@ -24,5 +24,13 @@ jobs:
       run: python -m pytest tests/ -q
     - name: Run Build Capability Map Check
       run: python scripts/build_capability_map.py --check
+    - name: Check generated schemas match generator
+      run: python scripts/generate_schemas_templates.py --check
+    - name: Check generated workflows match generator
+      run: python scripts/generate_workflows.py --check
+    - name: Check generated provenance is consistent
+      run: python scripts/audit_sources.py --check
     - name: Run RUP Validation
       run: python scripts/validate_rup.py --schema protocol/rup-schema.json all .
+    - name: Ensure no uncommitted generated changes
+      run: git diff --exit-code

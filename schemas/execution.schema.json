@@ -7,22 +7,22 @@
     "changes": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/ExecutionChange"
+        "$ref": "#/$defs/FileChange"
       }
     },
     "commits": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/ExecutionCommit"
+        "$ref": "#/$defs/Commit"
       }
     },
     "local_verification": {
-      "type": "object"
+      "$ref": "#/$defs/LocalVerification"
     },
     "artifacts": {
       "type": "array",
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/Artifact"
       }
     }
   },
@@ -1943,12 +1943,6 @@
             "$ref": "#/$defs/FileChange"
           }
         },
-        "recommendations": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/WorkstreamRecommendation"
-          }
-        },
         "commits": {
           "type": "array",
           "items": {
@@ -2010,35 +2004,6 @@
           "type": "string"
         },
         "backlog_item_id": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorkstreamRecommendation": {
-      "type": "object",
-      "required": [
-        "backlog_item_id",
-        "subtype",
-        "disposition",
-        "rationale"
-      ],
-      "properties": {
-        "backlog_item_id": {
-          "type": "string"
-        },
-        "subtype": {
-          "type": "string"
-        },
-        "disposition": {
-          "type": "string",
-          "enum": [
-            "AGENT_ONLY",
-            "PARTIAL",
-            "NOT_PORTED"
-          ]
-        },
-        "rationale": {
           "type": "string"
         }
       },
@@ -2116,12 +2081,6 @@
         },
         "passed": {
           "type": "boolean"
-        },
-        "tool": {
-          "type": [
-            "string",
-            "null"
-          ]
         },
         "details": {
           "type": "string"
