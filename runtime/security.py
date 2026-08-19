@@ -4,7 +4,7 @@ Implements adversarial prompt injection defense, path jail enforcement, and safe
 """
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Iterator, Optional, Set
 import yaml
 import json
 
@@ -44,6 +44,37 @@ def enforce_path_jail(root: Path, target: Path) -> Path:
     except ValueError:
         raise PermissionError(f"Path traversal detected: {target} escapes {root}")
     return resolved_target
+
+
+def iter_jailed_files(
+    root: Path,
+    max_bytes: int = MAX_FILE_BYTES,
+    skip_parts: Optional[Set[str]] = None,
+) -> Iterator[Path]:
+    """Yield regular files under ``root`` whose resolved real path stays inside ``root``.
+
+    Symlinks are followed only after the resolved target is confirmed to be
+    contained within ``root.resolve()``. Broken symlinks and traversal attempts
+    are skipped.
+    """
+    root_resolved = root.resolve()
+    skip_parts = skip_parts or set()
+
+    for entry in root_resolved.rglob("*"):
+        try:
+            if skip_parts and any(part in entry.parts for part in skip_parts):
+                continue
+            if entry.is_symlink():
+                target = entry.resolve(strict=True)
+                enforce_path_jail(root_resolved, target)
+            if not entry.is_file():
+                continue
+            if entry.stat().st_size > max_bytes:
+                continue
+        except (OSError, ValueError, PermissionError):
+            continue
+        yield entry
+
 
 def safe_load_yaml(file_path: Path, max_bytes: int = MAX_FILE_BYTES):
     """Load YAML with file size and alias expansion guardrails."""
