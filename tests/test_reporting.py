@@ -1,5 +1,6 @@
 """Unit tests for the RUP reporting phase."""
 import json
+import shlex
 from pathlib import Path
 
 import pytest
@@ -115,3 +116,70 @@ def test_completed_selected_item_does_not_block_readiness(tmp_path):
     follow_up_ids = {f["id"] for f in report["followups"]}
     assert "BUG-001" not in follow_up_ids
     assert report["summary"]["ready_for_submission"] is True
+
+
+def test_rollback_commands_quote_hostile_filenames(tmp_path):
+    """RUP-REPORT-003: rollback commands must quote filenames containing shell metacharacters."""
+    repo = tmp_path / "hostile_repo"
+    repo.mkdir()
+    paths = RupPaths(repo)
+    state = StateManager(paths)
+
+    state.save_json(
+        {
+            "repo_metadata": {"name": "test"},
+            "risk_assessment": {
+                "production_readiness_score": 60,
+                "technical_debt_score": 40,
+            },
+        },
+        "RUP_DISCOVERY.json",
+    )
+    state.save_json(
+        {
+            "backlog": [],
+            "selected_items": [],
+            "risk_analysis": {},
+        },
+        "RUP_PLAN.json",
+    )
+    state.save_json(
+        {
+            "changes": [
+                {
+                    "file_path": "$(touch PWNED).py",
+                    "change_type": "create",
+                    "rationale": "hostile create",
+                },
+                {
+                    "file_path": "foo'; command; echo '.py",
+                    "change_type": "modify",
+                    "rationale": "hostile modify",
+                },
+            ],
+            "commits": [],
+            "local_verification": {},
+        },
+        "RUP_EXECUTION.json",
+    )
+    state.save_json(
+        {
+            "verification_results": {"overall_status": "failed"},
+            "metrics": {},
+            "audit_trail": [],
+        },
+        "RUP_VERIFICATION.json",
+    )
+
+    builder = ArtifactBuilder(paths, state=state)
+    phase = ReportingPhase(repo, StateManager(paths), builder)
+    report = phase.execute()
+
+    commands = report["rollback_procedure"]["commands"]
+    create_cmd = next(c for c in commands if c.startswith("rm"))
+    modify_cmd = next(c for c in commands if c.startswith("git checkout"))
+
+    assert shlex.quote("$(touch PWNED).py") in create_cmd
+    assert shlex.quote("foo'; command; echo '.py") in modify_cmd
+    assert "rm -f --" in create_cmd
+    assert "git checkout --" in modify_cmd

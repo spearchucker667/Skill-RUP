@@ -8,6 +8,7 @@ Implements canonical Phase 4 Reporting & Handoff:
 - Rollback commands
 - Truthful publication instructions (no false PR merge claims)
 """
+import shlex
 import warnings
 from typing import Dict, Any, List, Set
 from pathlib import Path
@@ -79,15 +80,19 @@ class ReportingPhase:
                     "disposition": completion.get(b["id"], "UNKNOWN"),
                 })
 
-        # Rollback commands
+        # Rollback commands (quoted for hostile filenames)
         rollback_cmds = []
         created_files = [c["file_path"] for c in changes if c.get("change_type") == "create"]
         modified_files = [c["file_path"] for c in changes if c.get("change_type") in ("modify", "delete", "rename")]
 
         if modified_files:
-            rollback_cmds.append(f"git checkout -- {' '.join(modified_files)}")
+            rollback_cmds.append(
+                "git checkout -- " + " ".join(shlex.quote(p) for p in modified_files)
+            )
         if created_files:
-            rollback_cmds.append(f"rm -f {' '.join(created_files)}")
+            rollback_cmds.append(
+                "rm -f -- " + " ".join(shlex.quote(p) for p in created_files)
+            )
         if not rollback_cmds:
             rollback_cmds.append("# No changes to revert")
 
