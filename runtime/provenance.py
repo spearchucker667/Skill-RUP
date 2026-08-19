@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .command_runner import run_command
+from .security import iter_jailed_files
 from .source_authority import SOURCE_AUTHORITY
 
 CANONICAL_RUP_REPO = SOURCE_AUTHORITY["canonical_repo"]
@@ -512,15 +513,8 @@ class ProvenanceManager:
             :func:`build_transfer_manifest`.
         """
         manifest_files = []
-        for p in sorted(self.repo_root.rglob("*")):
-            if not p.is_file():
-                continue
-            if any(
-                part in p.parts
-                for part in [".git", ".venv", "__pycache__", ".reference", "dist", "build"]
-            ):
-                continue
-
+        skip_parts = {".git", ".venv", "__pycache__", ".reference", "dist", "build"}
+        for p in iter_jailed_files(self.repo_root, skip_parts=skip_parts):
             rel = p.relative_to(self.repo_root)
             manifest_files.append(
                 {
