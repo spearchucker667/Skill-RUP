@@ -403,8 +403,9 @@ def cmd_validate_protocol(args: argparse.Namespace) -> int:
 def cmd_validate_output(args: argparse.Namespace) -> int:
     """Validate an agent output JSON file."""
     try:
-        schema = load_schema(args.schema)
-        derived_schema = load_derived_schema(args.schema)
+        schema_path = _find_schema_path(args.schema)
+        schema = load_schema(schema_path)
+        derived_schema = load_derived_schema(schema_path)
         output = load_json(Path(args.file))
 
         valid, errors = validate_agent_output(output, args.type, schema, derived_schema)
@@ -450,13 +451,13 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        schema = load_schema(args.schema)
         schema_path = _find_schema_path(args.schema)
+        schema = load_schema(schema_path)
     except FileNotFoundError as e:
         print(f"{colorize('Error:', Colors.RED)} {e}")
         return 1
 
-    derived_schema = load_derived_schema(args.schema)
+    derived_schema = load_derived_schema(schema_path)
 
     schemas_dir = _resolve_schemas_dir(schema_path)
     derived_schemas: Dict[str, Dict[str, Any]] = {}
