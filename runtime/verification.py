@@ -432,8 +432,8 @@ class VerificationPhase:
     # ------------------------------------------------------------------
     # Lint
     # ------------------------------------------------------------------
-    def _count_lint_violations(self, linter: str, cmd: List[str]) -> Tuple[int, str]:
-        """Run the linter and return a precise violation count plus raw output."""
+    def _count_lint_violations(self, linter: str, cmd: List[str]) -> Tuple[int, str, int]:
+        """Run the linter and return a precise violation count, raw output, and return code."""
         if linter == "ruff":
             # Prefer JSON output for an exact count; fall back to line counting.
             json_cmd = cmd + ["--output-format=json"]
@@ -442,14 +442,14 @@ class VerificationPhase:
             try:
                 data = json.loads(stdout)
                 if isinstance(data, list):
-                    return len(data), stdout
+                    return len(data), stdout, rc
             except Exception:  # nosec B110
                 pass
 
         rc, stdout, _ = self._run_tool(cmd, timeout=120)
         if rc != 0:
-            return len([line for line in stdout.splitlines() if line.strip()]), stdout
-        return 0, stdout
+            return len([line for line in stdout.splitlines() if line.strip()]), stdout, rc
+        return 0, stdout, rc
 
     def _run_lint(self) -> Dict[str, Any]:
         linter = self._tools.get("linter")
@@ -471,10 +471,11 @@ class VerificationPhase:
         if cmd is None:
             return self._schema_lint_not_run("unavailable", f"Unsupported linter: {linter}", tool=linter)
 
-        violations, lint_stdout = self._count_lint_violations(linter, cmd)
+        violations, lint_stdout, rc = self._count_lint_violations(linter, cmd)
 
         return {
             "executed": True,
+            "command_succeeded": rc == 0,
             "violations_before": 0,
             "violations_after": violations,
             "auto_fixed": 0,
@@ -811,7 +812,7 @@ class VerificationPhase:
         if name == "tests":
             return result.get("failed", 0) == 0
         if name == "lint":
-            return result.get("violations_after", 0) == 0
+            return result.get("command_succeeded") is True and result.get("violations_after", 0) == 0
         if name == "build":
             return result.get("succeeded") is True
         # type_check and all security scanners expose an explicit `passed` field.

@@ -423,3 +423,26 @@ def test_run_tests_records_flakiness_and_coverage_delta(make_phase, tmp_path, mo
     assert saved.get("coverage_after") == 80.0
     assert saved.get("coverage_delta") == 10.0
     assert saved.get("tests_after") == 8
+
+
+
+def test_lint_gate_fails_when_command_crashes(make_phase, tmp_path, monkeypatch):
+    """RUP-VERIFY-001: a linter returning rc != 0 with no parseable violations must fail the gate."""
+    (tmp_path / "bad.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "ruff.toml").write_text("", encoding="utf-8")
+    phase, _, _ = make_phase()
+    phase._tools["linter"] = "ruff"
+    monkeypatch.setattr(phase, "_tool_available", lambda e: e == "ruff")
+
+    def _fake_run_command(cmd, cwd, timeout=300, env=None):
+        if "ruff" in cmd:
+            return 1, "", "internal error"
+        return 127, "", "not found"
+
+    monkeypatch.setattr(verification, "run_command", _fake_run_command)
+
+    lint = phase._run_lint()
+    assert lint["executed"] is True
+    assert lint["command_succeeded"] is False
+    assert lint["violations_after"] == 0
+    assert phase._gate_passed("lint", lint) is False
