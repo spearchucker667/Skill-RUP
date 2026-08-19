@@ -11,6 +11,11 @@ from pathlib import Path
 from .state import StateManager
 from .artifact_builder import ArtifactBuilder
 
+
+class PlanningError(RuntimeError):
+    """Raised when the planning phase encounters an invalid plan."""
+
+
 PRIORITY_MAP = {
     "critical": "P0",
     "high": "P1",
@@ -55,7 +60,7 @@ class PlanningPhase:
             # Tailored acceptance criteria & verification methods
             acceptance_criteria = []
             verification_method = "Automated verification"
-            dependencies = []
+            dependencies = list(gap.get("dependencies", []))
 
             if category == "tests":
                 acceptance_criteria = [
@@ -181,16 +186,24 @@ class PlanningPhase:
     def _sequence_execution(self, selected_ids: List[str], backlog: List[Dict[str, Any]]) -> List[str]:
         """Topological sequencing of selected backlog items based on dependencies."""
         backlog_by_id = {b["id"]: b for b in backlog}
-        ordered = []
-        visited = set()
+        selected_set = set(selected_ids)
+        visiting: set[str] = set()
+        visited: set[str] = set()
+        ordered: list[str] = []
 
-        def visit(item_id):
-            if item_id in visited or item_id not in backlog_by_id:
+        def visit(item_id: str) -> None:
+            if item_id in visiting:
+                raise PlanningError(f"Dependency cycle detected involving {item_id}")
+            if item_id in visited or item_id not in selected_set:
                 return
-            item = backlog_by_id[item_id]
-            for dep in item.get("dependencies", []):
-                if dep in selected_ids and dep not in visited:
+            if item_id not in backlog_by_id:
+                visited.add(item_id)
+                return
+            visiting.add(item_id)
+            for dep in backlog_by_id[item_id].get("dependencies", []):
+                if dep in selected_set:
                     visit(dep)
+            visiting.remove(item_id)
             visited.add(item_id)
             ordered.append(item_id)
 

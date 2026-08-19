@@ -349,11 +349,39 @@ class ExecutionPhase:
             )
         return changes, recommendations
 
+    @staticmethod
+    def _detect_default_branch(target_dir: Path) -> str:
+        """Return the repository's default branch, falling back to 'main'."""
+        try:
+            rc, stdout, _ = run_command(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=target_dir
+            )
+            if rc == 0 and stdout.strip():
+                return stdout.strip()
+        except Exception:
+            pass
+        return "main"
+
+    @staticmethod
+    def _pyproject_is_installable(pyproject: Path) -> bool:
+        """Return True when pyproject.toml indicates the package is installable."""
+        if not pyproject.exists():
+            return False
+        try:
+            text = pyproject.read_text(encoding="utf-8")
+        except Exception:
+            return False
+        return any(
+            header in text
+            for header in ("[project]", "[tool.setuptools]", "[tool.flit", "[tool.poetry]")
+        )
+
     def _handle_ci(
         self, item: Dict[str, Any], primary_lang: str, subtype: str
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         item_id = item.get("id", "")
         changes: List[Dict[str, Any]] = []
+        recommendations: List[Dict[str, Any]] = []
         wf_dir = self.target_dir / ".github" / "workflows"
         wf_dir.mkdir(exist_ok=True, parents=True)
         ci_path = wf_dir / "ci.yml"
@@ -361,15 +389,42 @@ class ExecutionPhase:
             return changes, []
 
         lang = (primary_lang or "unknown").lower()
+        tools = self.tool_detector.detect_all()
+        default_branch = self._detect_default_branch(self.target_dir)
+
+        supported = {"python", "javascript", "typescript", "rust", "go"}
+        if lang not in supported:
+            recommendations.append(
+                self._recommendation(
+                    item_id,
+                    subtype,
+                    "AGENT_ONLY",
+                    f"No CI generator available for primary language '{primary_lang}'; "
+                    "author a workflow manually.",
+                )
+            )
+            return changes, recommendations
+
         if lang in ("javascript", "typescript"):
-            steps = """      - name: Set up Node.js
+            build_tool = tools.get("build_tool") or "npm"
+            pkg_mgr = build_tool if build_tool in ("npm", "pnpm", "yarn") else "npm"
+            if pkg_mgr == "npm":
+                install_cmd = "npm ci"
+                test_cmd = "npm test"
+            elif pkg_mgr == "pnpm":
+                install_cmd = "pnpm install --frozen-lockfile"
+                test_cmd = "pnpm test"
+            else:
+                install_cmd = "yarn install --frozen-lockfile"
+                test_cmd = "yarn test"
+            steps = f"""      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
       - name: Install dependencies
-        run: npm ci
+        run: {install_cmd}
       - name: Run tests
-        run: npm test"""
+        run: {test_cmd}"""
         elif lang == "rust":
             steps = """      - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -387,17 +442,20 @@ class ExecutionPhase:
       - name: Run tests
         run: go test ./..."""
         else:
-            # Default to Python-oriented steps.
-            steps = """      - name: Set up Python
+            # Python-oriented steps.
+            installable = self._pyproject_is_installable(self.target_dir / "pyproject.toml")
+            install_block = """          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest"""
+            if installable:
+                install_block += "\n          if [ -f pyproject.toml ]; then pip install -e .; fi"
+            steps = f"""      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f pyproject.toml ]; then pip install -e .; fi
-          pip install pytest
+{install_block}
       - name: Run tests
         run: pytest"""
 
@@ -405,9 +463,9 @@ class ExecutionPhase:
 
 on:
   push:
-    branches: [main, master]
+    branches: [{default_branch}]
   pull_request:
-    branches: [main, master]
+    branches: [{default_branch}]
 
 jobs:
   test:
@@ -425,7 +483,7 @@ jobs:
                 "backlog_item_id": item_id,
             }
         )
-        return changes, []
+        return changes, recommendations
 
     def _handle_readme(
         self, item: Dict[str, Any], meta: Dict[str, Any], subtype: str

@@ -7,6 +7,8 @@ risk-tolerance filtering in isolation.
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from runtime.artifact_builder import ArtifactBuilder
 from runtime.paths import RupPaths
 from runtime.planning import PlanningPhase
@@ -223,3 +225,48 @@ def test_fallback_item_respects_time_budget(tmp_path):
 
     assert plan_data["selected_items"] == []
     assert plan_data.get("selected_for_escalation", []) == []
+
+
+def test_dependency_cycle_raises_planning_error(tmp_path):
+    """RUP-PLAN-005: cyclic dependencies among selected items must fail planning."""
+    from runtime.planning import PlanningError
+
+    phase = _make_phase(
+        tmp_path / "cycle_repo",
+        gaps=[
+            {
+                "id": "A-001",
+                "severity": "high",
+                "category": "ci",
+                "effort_estimate": "small",
+                "files_affected": [],
+                "title": "A",
+                "description": "",
+                "impact": "",
+                "suggested_fix": "",
+            },
+            {
+                "id": "B-001",
+                "severity": "high",
+                "category": "tests",
+                "effort_estimate": "small",
+                "files_affected": [],
+                "title": "B",
+                "description": "",
+                "impact": "",
+                "suggested_fix": "",
+            },
+        ],
+        time_budget=100,
+        max_files=20,
+        risk_tolerance="high",
+    )
+    # Manually inject cyclic dependencies after backlog generation by patching
+    # the discovery gaps before execution.
+    discovery = phase.state_manager.load_json("RUP_DISCOVERY.json")
+    discovery["gaps"][0]["dependencies"] = ["B-001"]
+    discovery["gaps"][1]["dependencies"] = ["A-001"]
+    phase.state_manager.save_json(discovery, "RUP_DISCOVERY.json")
+
+    with pytest.raises(PlanningError):
+        phase.execute()
