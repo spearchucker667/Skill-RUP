@@ -92,3 +92,30 @@ def test_package_manifest_hashes_match():
             data = zf.read(arcname)
             actual = __import__("hashlib").sha256(data).hexdigest()
             assert actual == expected_sha, f"hash mismatch for {arcname}"
+
+
+def test_verify_package_fails_on_extra_file():
+    out = _unique_dist_path("extra") / "rup-skill-v3.0.0.zip"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    r = _run(["--version", "3.0.0", "--output", str(out), "--root", str(ROOT)])
+    assert r.returncode == 0, r.stdout + r.stderr
+    # Inject an undeclared file without touching the external checksum sidecar.
+    sha_path = out.with_suffix(out.suffix + ".sha256")
+    sha_path.unlink()
+    with zipfile.ZipFile(out, "a") as zf:
+        zf.writestr("rup/extra-injected-file.txt", b"injected")
+    v = _run(["--verify", "--output", str(out)])
+    assert v.returncode == 1, v.stdout + v.stderr
+    assert "member mismatch" in v.stderr.lower() or "extra" in v.stderr.lower()
+
+
+def test_verify_package_fails_on_external_checksum_mismatch():
+    out = _unique_dist_path("sha") / "rup-skill-v3.0.0.zip"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    r = _run(["--version", "3.0.0", "--output", str(out), "--root", str(ROOT)])
+    assert r.returncode == 0, r.stdout + r.stderr
+    sha_path = out.with_suffix(out.suffix + ".sha256")
+    sha_path.write_text("0" * 64 + f"  {out.name}\n", encoding="utf-8")
+    v = _run(["--verify", "--output", str(out)])
+    assert v.returncode == 1, v.stdout + v.stderr
+    assert "sha-256 mismatch" in v.stderr.lower() or "external" in v.stderr.lower()

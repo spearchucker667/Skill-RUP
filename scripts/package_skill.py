@@ -219,6 +219,29 @@ def verify_package(out_path: Path) -> int:
             _error("Manifest.json is not canonically formatted")
             failed += 1
 
+        # Ensure the archive contains exactly the declared files plus the manifest.
+        declared = set(expected_files)
+        actual = {
+            n for n in names
+            if not n.endswith("/") and n != f"{SKILL_DIR_NAME}/manifest.json"
+        }
+        extra = actual - declared
+        missing = declared - actual
+        if extra or missing:
+            _error(f"Package member mismatch: extra={sorted(extra)}, missing={sorted(missing)}")
+            failed += 1
+
+    # Verify the external SHA-256 sidecar when it is present.
+    sha256_path = out_path.with_suffix(out_path.suffix + ".sha256")
+    if sha256_path.exists():
+        expected_external = sha256_path.read_text(encoding="utf-8").strip().split()[0]
+        actual_archive_hash = hash_file(out_path)
+        if actual_archive_hash != expected_external:
+            _error(
+                f"External SHA-256 mismatch: expected {expected_external}, got {actual_archive_hash}"
+            )
+            failed += 1
+
     if failed:
         print(f"Package verification FAILED: {failed} issue(s)", file=sys.stderr)
         return 1
