@@ -69,8 +69,8 @@ class StateManager:
             session = self.load_json("session-state.json")
             if isinstance(session, dict) and session.get("run_id"):
                 return session["run_id"]
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.warn(f"Could not recover run_id from session state: {e}", RuntimeWarning, stacklevel=2)
         return None
 
     def _generate_run_id(self) -> str:
@@ -81,8 +81,8 @@ class StateManager:
             plan = self.load_json("RUP_PLAN.json")
             if plan and "constraints" in plan:
                 constraints = plan["constraints"]
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.warn(f"Could not load planning constraints for run_id: {e}", RuntimeWarning, stacklevel=2)
         return RunManifest.generate_run_id(
             str(self.paths.target_dir),
             target_git_commit=target_commit,

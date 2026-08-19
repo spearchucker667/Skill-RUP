@@ -358,8 +358,8 @@ class ExecutionPhase:
             )
             if rc == 0 and stdout.strip():
                 return stdout.strip()
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.warn(f"Could not detect default branch: {e}", RuntimeWarning, stacklevel=2)
         return "main"
 
     @staticmethod
@@ -951,7 +951,7 @@ public issue for security-sensitive findings.
         for cov_file in self.target_dir.glob(".coverage*"):
             try:
                 cov_file.unlink()
-            except Exception:
+            except Exception:  # nosec B110
                 pass
 
         return {"coverage_before": coverage_before, "tests_before": tests_before}
