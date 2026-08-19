@@ -36,11 +36,16 @@ EXPECTED_ARTIFACTS = [
     "session-state.json",
 ]
 
+# Artifacts that must appear in the run-manifest ledger. The manifest itself
+# and its checksum sidecar are intentionally excluded from the ledger.
+MANIFEST_LEDGER_ARTIFACTS = [a for a in EXPECTED_ARTIFACTS if a not in ("run-manifest.json",)]
+
 REQUIRED_PHASE_ORDER = ["discovery", "planning", "execution", "verification", "completed"]
 
-# Fixtures where the RUP lifecycle is expected to end with a non-zero exit
-# because verification correctly reports failed/problematic state.
-EXPECTED_TO_FAIL_LIFECYCLE = {"failing_tests", "security_findings"}
+# Fixtures where the RUP verification gate itself is expected to report a
+# failure (as opposed to merely being not submission-ready due to honest
+# AGENT_ONLY/PARTIAL/NOT_PORTED dispositions).
+EXPECTED_VERIFICATION_FAILURE = {"failing_tests", "security_findings"}
 # Fixtures where malicious root-level state must be ignored. The lifecycle is
 # allowed to succeed as long as the malicious plan was not executed.
 ADVERSARIAL_STATE_FIXTURES = {"adversarial_state"}
@@ -138,7 +143,7 @@ def check_manifest_artifacts(target_dir: Path) -> List[str]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     recorded_names = {a.get("name") for a in manifest.get("artifacts", [])}
 
-    for name in EXPECTED_ARTIFACTS:
+    for name in MANIFEST_LEDGER_ARTIFACTS:
         if name not in recorded_names:
             errors.append(f"Run manifest missing artifact entry: {name}")
 
@@ -205,7 +210,7 @@ def run_fixture(fixture_name: str, fixtures_base: Path) -> Tuple[bool, List[str]
         cmd = [sys.executable, "-m", "runtime.cli", "all", "--target", str(target_dir)]
         result = _run(cmd, REPO_ROOT)
 
-        expected_fail = fixture_name in EXPECTED_TO_FAIL_LIFECYCLE
+        expected_verification_failure = fixture_name in EXPECTED_VERIFICATION_FAILURE
         is_adversarial = fixture_name in ADVERSARIAL_STATE_FIXTURES
 
         if is_adversarial:
@@ -220,12 +225,30 @@ def run_fixture(fixture_name: str, fixtures_base: Path) -> Tuple[bool, List[str]
                 errors.extend(check_fixture_specific(target_dir, fixture_name))
             return (not errors), errors
 
-        if result.returncode != 0 and not expected_fail:
+        # The CLI now returns 0 only when verification passes *and* the final
+        # report says the repository is ready_for_submission. Fixtures with
+        # honest AGENT_ONLY/PARTIAL/NOT_PORTED dispositions are therefore
+        # expected to exit non-zero.
+        ready_for_submission = False
+        try:
+            final_report = json.loads(
+                (target_dir / ".rup" / "RUP_FINAL_REPORT.json").read_text(encoding="utf-8")
+            )
+            ready_for_submission = bool(final_report.get("summary", {}).get("ready_for_submission"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            ready_for_submission = False
+
+        lifecycle_should_succeed = ready_for_submission and not expected_verification_failure
+
+        if result.returncode != 0 and lifecycle_should_succeed:
             errors.append(f"Lifecycle exited {result.returncode}: {result.stderr}")
             return False, errors
 
-        if result.returncode == 0 and expected_fail:
-            errors.append(f"Lifecycle unexpectedly succeeded for {fixture_name}")
+        if result.returncode == 0 and not lifecycle_should_succeed:
+            errors.append(
+                f"Lifecycle unexpectedly succeeded for {fixture_name} "
+                f"(ready_for_submission={ready_for_submission}, expected_verification_failure={expected_verification_failure})"
+            )
             return False, errors
 
         errors.extend(check_artifacts(target_dir))

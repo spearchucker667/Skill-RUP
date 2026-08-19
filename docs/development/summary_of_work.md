@@ -1143,3 +1143,38 @@ None.
 
 ### Next Actions
 - Monitor GitHub Actions for the wave-2 commits to confirm the refactored CI topology, release workflow syntax, and Windows forward-test job complete green.
+
+---
+
+## 2026-08-19 - Follow-up: Fix forward-test expectations after manifest/exit-semantics changes
+
+**Agent**: Kimi Code CLI
+**Task**: Update `scripts/forward_test.py` so the forward-test suite matches the new run-manifest ledger semantics (manifest excludes itself and its `.sha256` sidecar) and the CLI lifecycle exit semantics (exit `0` only when verification passes **and** `ready_for_submission` is true).
+
+### Accomplishments
+- Removed `run-manifest.json` from the set of artifact names the forward test expects to find inside `run-manifest.json`'s own ledger.
+- Replaced the old `EXPECTED_TO_FAIL_LIFECYCLE` boolean with a `ready_for_submission`-driven exit expectation: the test now accepts a non-zero lifecycle exit for fixtures whose final report says the repository is not submission-ready, while still treating `failing_tests` and `security_findings` as verification-failure fixtures.
+- Verified all 10 fixtures pass locally under the new semantics.
+
+### Files Changed
+- `scripts/forward_test.py`
+- `docs/development/summary_of_work.md` (this entry)
+
+### Validation Results
+- `python -m pytest tests/ -q` — **144 passed**.
+- `python scripts/forward_test.py --fixtures tests/fixtures` — **10/10 passed**.
+- `python scripts/generate_schemas_templates.py --check` — PASS.
+- `python scripts/generate_workflows.py --check` — PASS.
+- `python scripts/build_capability_map.py --check` — PASS.
+- `python scripts/audit_sources.py --check` — PASS.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` — 20/20 valid.
+- `bandit -r runtime scripts -c bandit.yaml` — no issues.
+
+### Push
+- Committed follow-up fix to `main`.
+
+### Unresolved Blockers
+None.
+
+### Next Actions
+- Continue monitoring GitHub Actions for the refactored CI topology, release workflow syntax, and Windows forward-test job.
