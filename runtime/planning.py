@@ -118,8 +118,13 @@ class PlanningPhase:
 
         return backlog
 
-    def _select_work(self, backlog: List[Dict[str, Any]]) -> List[str]:
-        """Select items within time budget, max files, and risk tolerance."""
+    def _select_work(self, backlog: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Select items within time budget, max files, and risk tolerance.
+
+        P0 items are mandatory-to-address but must still fit inside the
+        configured run boundary. Items that violate constraints are escalated
+        for explicit override rather than silently admitted.
+        """
         priority_rank = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
         risk_rank = {"low": 0, "medium": 1, "high": 2}
         sorted_backlog = sorted(
@@ -127,10 +132,18 @@ class PlanningPhase:
             key=lambda x: (priority_rank.get(x["priority"], 9), x["estimated_effort_minutes"]),
         )
 
-        selected = []
+        selected: List[str] = []
+        escalation: List[str] = []
         allocated_minutes = 0
         selected_files = 0
         tolerance_rank = risk_rank.get(self.risk_tolerance, 1)
+
+        def _fits_constraints(item: Dict[str, Any], mins: int, file_count: int, item_risk_rank: int) -> bool:
+            return (
+                item_risk_rank <= tolerance_rank
+                and allocated_minutes + mins <= self.time_budget_minutes
+                and selected_files + file_count <= self.max_files
+            )
 
         for item in sorted_backlog:
             mins = item["estimated_effort_minutes"]
@@ -138,31 +151,32 @@ class PlanningPhase:
             item_risk_rank = risk_rank.get(item.get("risk", "low"), 0)
 
             if item["priority"] == "P0":
-                # P0 items are mandatory
-                selected.append(item["id"])
-                allocated_minutes += mins
-                selected_files += file_count
-            elif (
-                item_risk_rank <= tolerance_rank
-                and allocated_minutes + mins <= self.time_budget_minutes
-                and selected_files + file_count <= self.max_files
-            ):
+                if _fits_constraints(item, mins, file_count, item_risk_rank):
+                    selected.append(item["id"])
+                    allocated_minutes += mins
+                    selected_files += file_count
+                else:
+                    escalation.append(item["id"])
+            elif _fits_constraints(item, mins, file_count, item_risk_rank):
                 selected.append(item["id"])
                 allocated_minutes += mins
                 selected_files += file_count
 
         # Fallback: select a single feasible high-value item if nothing else fit.
-        if not selected and backlog:
+        if not selected and not escalation and backlog:
             for item in sorted_backlog:
+                mins = item["estimated_effort_minutes"]
                 file_count = max(1, len(item.get("scope", {}).get("files", [])))
                 item_risk_rank = risk_rank.get(item.get("risk", "low"), 0)
-                if item["priority"] == "P0" or (
-                    item_risk_rank <= tolerance_rank and file_count <= self.max_files
-                ):
+                if _fits_constraints(item, mins, file_count, item_risk_rank):
                     selected.append(item["id"])
                     break
 
-        return selected
+        return {
+            "selected_items": selected,
+            "selected_for_escalation": escalation,
+            "requires_explicit_override": bool(escalation),
+        }
 
     def _sequence_execution(self, selected_ids: List[str], backlog: List[Dict[str, Any]]) -> List[str]:
         """Topological sequencing of selected backlog items based on dependencies."""
@@ -209,7 +223,8 @@ class PlanningPhase:
 
         gaps = discovery_data.get("gaps", [])
         backlog = self._generate_backlog(gaps)
-        selected_ids = self._select_work(backlog)
+        selection = self._select_work(backlog)
+        selected_ids = selection["selected_items"]
         execution_order = self._sequence_execution(selected_ids, backlog)
 
         selected_items = [b for b in backlog if b["id"] in selected_ids]
@@ -227,6 +242,8 @@ class PlanningPhase:
             "constraints": constraints,
             "backlog": backlog,
             "selected_items": selected_ids,
+            "selected_for_escalation": selection["selected_for_escalation"],
+            "requires_explicit_override": selection["requires_explicit_override"],
             "execution_order": execution_order,
             "risk_analysis": risk_analysis,
             "estimated_effort": {

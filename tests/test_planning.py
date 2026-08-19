@@ -162,3 +162,64 @@ def test_plan_output_validates_against_schema(tmp_path):
         text=True,
     )
     assert result.returncode == 0, f"Schema validation failed: {result.stdout} {result.stderr}"
+
+
+def test_p0_exceeding_max_files_is_escalated(tmp_path):
+    """RUP-PLAN-001: P0 items that exceed max-files must escalate, not bypass constraints."""
+    phase = _make_phase(
+        tmp_path / "p0_maxfiles_repo",
+        gaps=[_gap("BUG-001", "critical", "bugs", "small", [f"f{i}.py" for i in range(30)])],
+        time_budget=100,
+        max_files=5,
+        risk_tolerance="low",
+    )
+    plan_data = phase.execute()
+
+    assert "BUG-001" not in plan_data["selected_items"]
+    assert "BUG-001" in plan_data.get("selected_for_escalation", [])
+    assert plan_data.get("requires_explicit_override") is True
+
+
+def test_p0_exceeding_time_budget_is_escalated(tmp_path):
+    """RUP-PLAN-002: P0 items that exceed time budget must escalate."""
+    phase = _make_phase(
+        tmp_path / "p0_time_repo",
+        gaps=[_gap("BUG-001", "critical", "bugs", "large", ["a.py"])],
+        time_budget=10,
+        max_files=20,
+        risk_tolerance="high",
+    )
+    plan_data = phase.execute()
+
+    assert "BUG-001" not in plan_data["selected_items"]
+    assert "BUG-001" in plan_data.get("selected_for_escalation", [])
+
+
+def test_p0_above_risk_tolerance_is_escalated(tmp_path):
+    """RUP-PLAN-003: P0 items above risk tolerance must escalate."""
+    phase = _make_phase(
+        tmp_path / "p0_risk_repo",
+        gaps=[_gap("BUG-001", "critical", "bugs", "large", ["a.py"])],
+        time_budget=100,
+        max_files=20,
+        risk_tolerance="low",
+    )
+    plan_data = phase.execute()
+
+    assert "BUG-001" not in plan_data["selected_items"]
+    assert "BUG-001" in plan_data.get("selected_for_escalation", [])
+
+
+def test_fallback_item_respects_time_budget(tmp_path):
+    """RUP-PLAN-004: fallback selection must also respect time budget."""
+    phase = _make_phase(
+        tmp_path / "fallback_time_repo",
+        gaps=[_gap("DOCS-001", "medium", "docs", "large", ["a.py"])],
+        time_budget=10,
+        max_files=20,
+        risk_tolerance="high",
+    )
+    plan_data = phase.execute()
+
+    assert plan_data["selected_items"] == []
+    assert plan_data.get("selected_for_escalation", []) == []

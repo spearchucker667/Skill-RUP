@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-19T00:15:03.428604Z",
+  "generated_at": "2026-08-19T07:55:26.275112Z",
   "canonical_repository": "https://github.com/spearchucker667/RUP-Protocol",
   "canonical_commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb",
   "canonical_protocol_version": "3.0.0",
@@ -374,14 +374,14 @@
       "source_git_blob_sha": "d55de0bc66e90bd7f896207952b4116c027b4404",
       "source_sha256": "03f6ceb9105e429f4df21a3c0e73196e12141e7e5e32b3a4bd0a4c53d563a5f4",
       "destination_path": "examples/plan_output.json",
-      "transfer_type": "exact_copy",
+      "transfer_type": "derived",
       "transformation_tool": null,
-      "destination_sha256": "03f6ceb9105e429f4df21a3c0e73196e12141e7e5e32b3a4bd0a4c53d563a5f4",
-      "destination_git_blob_sha": "d55de0bc66e90bd7f896207952b4116c027b4404",
+      "destination_sha256": "0c97f1c55d01015f83c59945c163655757cad94690eb0afe2dd38a597a153bb3",
+      "destination_git_blob_sha": "540cf8cad12102e3aba837d00a81ffaa926a67ab",
       "parity_tests": [
         "tests/forward/test_plan.py::test_plan_execution"
       ],
-      "rationale": "Copied verbatim from the canonical upstream source."
+      "rationale": "Adapted and extended locally from the canonical upstream source for the Skill-RUP implementation."
     },
     {
       "source_path": "examples/rup_mock_walkthrough.md",

@@ -1857,7 +1857,9 @@
         "backlog",
         "selected_items",
         "execution_order",
-        "estimated_effort"
+        "estimated_effort",
+        "selected_for_escalation",
+        "requires_explicit_override"
       ],
       "properties": {
         "meta": {
@@ -1958,6 +1960,15 @@
               ]
             }
           }
+        },
+        "selected_for_escalation": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "requires_explicit_override": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -2197,7 +2208,10 @@
           "type": "boolean"
         },
         "tool": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "details": {
           "type": "string"
