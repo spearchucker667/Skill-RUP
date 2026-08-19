@@ -11,7 +11,7 @@ Implements canonical Phase 1 Discovery:
 """
 from typing import Dict, Any, List
 from pathlib import Path
-from .inventory import InventoryManager
+from .inventory import InventoryManager, LOCKFILES
 from .tool_detection import ToolDetector
 from .redaction import scan_file_for_secrets
 from .security import scan_content_for_threats
@@ -93,8 +93,11 @@ class DiscoveryPhase:
                 "files_affected": [f.get("file", "") for f in secret_findings[:5]]
             })
 
-        # Lockfile Gap
+        # Lockfile Gap (only for ecosystems with a meaningful lockfile model)
         for idx, lang_info in enumerate(languages):
+            lang = lang_info["name"]
+            if lang not in LOCKFILES:
+                continue
             if lang_info["percentage"] > 10.0 and not lang_info.get("lockfile_present"):
                 gaps.append({
                     "id": f"SEC-{100 + idx:03d}",

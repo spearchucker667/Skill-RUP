@@ -135,7 +135,9 @@ class ToolDetector:
         if (self.target_dir / "pyproject.toml").exists():
             try:
                 c = (self.target_dir / "pyproject.toml").read_text(encoding="utf-8", errors="ignore")
-                if "tool.mypy" in c or "tool.pyright" in c:
+                if "tool.pyright" in c:
+                    return "pyright"
+                if "tool.mypy" in c:
                     return "mypy"
             except Exception as e:
                 warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)

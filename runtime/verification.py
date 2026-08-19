@@ -301,7 +301,13 @@ class VerificationPhase:
             if framework in ("jest", "vitest", "mocha", "npm-test") or (
                 framework is None and self._tools.get("build_tool") in ("npm", "pnpm", "yarn")
             ):
-                cmd = test_cmd + ["--coverage"]
+                build_tool = self._tools.get("build_tool")
+                pkg_mgr = build_tool if build_tool in ("npm", "pnpm", "yarn") else "npm"
+                if test_cmd and test_cmd[0] == pkg_mgr and test_cmd[1:] == ["test"]:
+                    # Package-manager test scripts require '--' to forward flags.
+                    cmd = test_cmd + ["--", "--coverage"]
+                else:
+                    cmd = test_cmd + ["--coverage"]
                 rc, stdout, stderr = run_command(cmd, cwd=self.target_dir, timeout=180)
                 if rc != 0:
                     return None
