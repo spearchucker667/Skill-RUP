@@ -1,0 +1,179 @@
+{
+  "meta": {
+    "agent_id": "agent_verification",
+    "timestamp": "2026-01-23T09:01:00Z",
+    "duration_ms": 8400,
+    "status": "success"
+  },
+  "verification_results": {
+    "overall_status": "passed",
+    "tests": {
+      "executed": true,
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 3.2,
+      "coverage_before": 45.0,
+      "coverage_after": 78.5,
+      "flaky_tests": [],
+      "new_tests_added": 15
+    },
+    "lint": {
+      "executed": true,
+      "violations_before": 23,
+      "violations_after": 0,
+      "auto_fixed": 23,
+      "new_violations": []
+    },
+    "security": {
+      "secret_scan": {
+        "executed": true,
+        "passed": true,
+        "findings": 0
+      },
+      "dependency_scan": {
+        "executed": true,
+        "passed": true,
+        "critical": 0,
+        "high": 0,
+        "medium": 2,
+        "low": 5
+      },
+      "sast_scan": {
+        "executed": true,
+        "passed": true,
+        "findings": 0
+      }
+    },
+    "build": {
+      "executed": true,
+      "succeeded": true,
+      "warnings": 0,
+      "duration_seconds": 12.5
+    },
+    "type_check": {
+      "executed": true,
+      "passed": true,
+      "errors": 0
+    }
+  },
+  "metrics": {
+    "files_changed": 2,
+    "files_created": 2,
+    "files_deleted": 0,
+    "lines_added": 245,
+    "lines_removed": 5,
+    "test_coverage_delta": 33.5,
+    "lint_violations_delta": -23,
+    "security_findings_delta": 0,
+    "build_time_delta_seconds": 0.3,
+    "technical_debt_delta": -15,
+    "production_readiness_delta": 20
+  },
+  "audit_trail": [
+    {
+      "timestamp": "2025-01-18T10:00:00Z",
+      "agent": "discovery_agent",
+      "action": "analyze_repository",
+      "result": "success",
+      "duration_ms": 5200,
+      "details": {
+        "files_analyzed": 47,
+        "gaps_found": 5
+      }
+    },
+    {
+      "timestamp": "2025-01-18T10:05:00Z",
+      "agent": "planning_agent",
+      "action": "generate_backlog",
+      "result": "success",
+      "duration_ms": 1200,
+      "details": {
+        "items_created": 5,
+        "items_selected": 3
+      }
+    },
+    {
+      "timestamp": "2025-01-18T10:10:00Z",
+      "agent": "execution_agent",
+      "action": "implement_changes",
+      "result": "success",
+      "duration_ms": 42000,
+      "details": {
+        "files_modified": 1,
+        "files_created": 2,
+        "commits_prepared": 3
+      }
+    },
+    {
+      "timestamp": "2025-01-18T10:52:00Z",
+      "agent": "verification_agent",
+      "action": "run_tests",
+      "result": "success",
+      "duration_ms": 3200,
+      "details": {
+        "tests_run": 42,
+        "tests_passed": 42,
+        "coverage_after": 78.5
+      }
+    },
+    {
+      "timestamp": "2025-01-18T10:53:00Z",
+      "agent": "verification_agent",
+      "action": "run_lint",
+      "result": "success",
+      "duration_ms": 800,
+      "details": {
+        "violations_before": 23,
+        "violations_after": 0,
+        "auto_fixed": 23
+      }
+    },
+    {
+      "timestamp": "2025-01-18T10:54:00Z",
+      "agent": "verification_agent",
+      "action": "run_security_scans",
+      "result": "success",
+      "duration_ms": 2400,
+      "details": {
+        "secret_scan_findings": 0,
+        "dependency_scan_high": 0,
+        "sast_findings": 0
+      }
+    },
+    {
+      "timestamp": "2025-01-18T10:56:00Z",
+      "agent": "verification_agent",
+      "action": "generate_final_report",
+      "result": "success",
+      "duration_ms": 900,
+      "details": {
+        "ready_for_pr": true
+      }
+    }
+  ],
+  "recommendations": {
+    "ready_for_pr": true,
+    "pr_title": "test(auth): add auth unit tests; ci(security): add secret scanning; docs: expand README",
+    "pr_description": "This PR improves baseline repo hygiene and production readiness.\n\nChanges:\n- Add gitleaks pre-commit hook for secret scanning\n- Add comprehensive unit tests for auth module\n- Expand README with install/usage/dev/test instructions\n\nVerification:\n- Tests: 42 passed\n- Lint: 0 violations after autofix\n- Security: secret scan passed; dependency scan no high/critical; SAST passed\n\nRollback:\n- Revert the 3 commits (see commit hashes once created)\n",
+    "pr_labels": [
+      "tests",
+      "documentation",
+      "security",
+      "ci"
+    ],
+    "required_reviewers": [],
+    "required_actions_before_merge": [
+      "Confirm CI runs in GitHub Actions for your repo",
+      "Confirm dependency scan findings are acceptable (medium/low only)"
+    ],
+    "followup_items": [
+      "Create SECURITY.md if missing",
+      "Add CODEOWNERS for medium+ repos",
+      "Add dependency caching to CI",
+      "Consider SBOM generation on release"
+    ],
+    "risk_assessment": "low"
+  },
+  "final_report": "# Final Report\n\n## Summary\n- Added secret scanning via pre-commit\n- Added auth unit tests and increased coverage\n- Improved README for install/usage/dev\n\n## Verification\n- Tests passed\n- Lint passed\n- Security scans passed\n\n## Follow-ups\n- Add SECURITY.md\n- Add CODEOWNERS\n"
+}

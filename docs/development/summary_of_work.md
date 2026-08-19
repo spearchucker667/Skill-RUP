@@ -1178,3 +1178,51 @@ None.
 
 ### Next Actions
 - Continue monitoring GitHub Actions for the refactored CI topology, release workflow syntax, and Windows forward-test job.
+
+---
+
+## 2026-08-19 - Follow-up: Fix CI provenance drift caused by ignored files and Windows line endings
+
+**Agent**: Kimi Code CLI
+**Task**: Resolve the failures in the `integrity` and `test (ubuntu-latest)` / `test (windows-latest)` CI jobs caused by upstream-transferred files being excluded by `.gitignore` and Windows CRLF checkout altering SHA-256 hashes.
+
+### Accomplishments
+- Scoped runtime-output ignore patterns (`*_output.json`, `mock_scenario_summary.json`, `rup_mock_walkthrough.md`, `RUP_*.json`, `RUP_*.md`) to the repository root so they no longer shadow upstream example files in `examples/`.
+- Removed `provenance/source-manifest.sha256` from `.gitignore`; it is a committed provenance artifact.
+- Added `.gitattributes` enforcing LF line endings for all text files, preventing GitHub Actions on Windows from changing SHA-256 hashes of canonical protocol files.
+- Force-added the previously ignored upstream-transferred files: `examples/discovery_output.json`, `examples/execution_output.json`, `examples/mock_scenario_summary.json`, `examples/plan_output.json`, `examples/rup_mock_walkthrough.md`, `examples/verification_output.json`, and `provenance/source-manifest.sha256`.
+- Regenerated provenance manifests (`canonical-source-manifest.json`, `transfer-manifest.json`, `source-manifest.json`, `source-manifest.sha256`) so the SHA-256 index matches the canonical source manifest.
+
+### Files Changed
+- `.gitignore`
+- `.gitattributes` (new)
+- `provenance/canonical-source-manifest.json`
+- `provenance/source-manifest.json`
+- `provenance/source-manifest.sha256` (new)
+- `provenance/transfer-manifest.json`
+- `examples/discovery_output.json` (new)
+- `examples/execution_output.json` (new)
+- `examples/mock_scenario_summary.json` (new)
+- `examples/plan_output.json` (new)
+- `examples/rup_mock_walkthrough.md` (new)
+- `examples/verification_output.json` (new)
+- `docs/development/summary_of_work.md` (this entry)
+
+### Validation Results
+- `python -m pytest tests/ -q` — **144 passed**.
+- `python scripts/forward_test.py --fixtures tests/fixtures` — **10/10 passed**.
+- `python scripts/generate_schemas_templates.py --check` — PASS.
+- `python scripts/generate_workflows.py --check` — PASS.
+- `python scripts/build_capability_map.py --check` — PASS.
+- `python scripts/audit_sources.py --check` — **63/63 passed**.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` — 20/20 valid.
+- `bandit -r runtime scripts -c bandit.yaml` — no issues.
+
+### Push
+- Committed provenance/line-ending fix to `main`.
+
+### Unresolved Blockers
+None.
+
+### Next Actions
+- Continue monitoring GitHub Actions for the refactored CI topology, release workflow syntax, and Windows forward-test job.

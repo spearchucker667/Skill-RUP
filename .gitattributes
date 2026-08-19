@@ -1,2 +1,10 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Force LF line endings for all text files so SHA-256 hashes remain stable
+# across macOS, Linux, and Windows checkouts.
+* text=auto eol=lf
+
+# Ensure JSON/YAML/Markdown files that participate in provenance verification
+# are always checked out with LF.
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf

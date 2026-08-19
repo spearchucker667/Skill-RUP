@@ -1,0 +1,130 @@
+{
+  "meta": {
+    "agent_id": "agent_planning",
+    "timestamp": "2026-01-23T09:00:06Z",
+    "duration_ms": 1100,
+    "status": "success"
+  },
+  "backlog": [
+    {
+      "id": "ITEM-001",
+      "priority": "P0",
+      "category": "security",
+      "title": "Add secret scanning pre-commit hook",
+      "description": "Configure gitleaks to scan for secrets before commits",
+      "scope": {
+        "files": [".pre-commit-config.yaml"],
+        "packages": []
+      },
+      "risk": "low",
+      "estimated_effort_minutes": 15,
+      "verification_method": "Run pre-commit with test secret to verify detection",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "gitleaks hook configured in .pre-commit-config.yaml",
+        "Hook successfully detects test secrets",
+        "CI workflow updated to run pre-commit"
+      ]
+    },
+    {
+      "id": "ITEM-002",
+      "priority": "P0",
+      "category": "tests",
+      "title": "Add unit tests for auth module",
+      "description": "Write comprehensive unit tests for src/auth.py",
+      "scope": {
+        "files": ["tests/test_auth.py", "src/auth.py"],
+        "packages": []
+      },
+      "risk": "low",
+      "estimated_effort_minutes": 30,
+      "verification_method": "Run pytest with coverage, verify auth.py coverage > 80%",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Test file created at tests/test_auth.py",
+        "All public functions in auth.py have tests",
+        "Edge cases and error conditions tested",
+        "Coverage for auth.py > 80%"
+      ]
+    },
+    {
+      "id": "ITEM-003",
+      "priority": "P1",
+      "category": "docs",
+      "title": "Update README with missing sections",
+      "description": "Add installation, configuration, and contributing sections",
+      "scope": {
+        "files": ["README.md"],
+        "packages": []
+      },
+      "risk": "low",
+      "estimated_effort_minutes": 20,
+      "verification_method": "Review README for completeness, test installation instructions",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Installation section with pip command",
+        "Configuration section with environment variables",
+        "Contributing section with dev setup",
+        "All code examples are runnable"
+      ]
+    },
+    {
+      "id": "ITEM-004",
+      "priority": "P1",
+      "category": "governance",
+      "title": "Create SECURITY.md",
+      "description": "Add security policy with vulnerability reporting process",
+      "scope": {
+        "files": ["SECURITY.md"],
+        "packages": []
+      },
+      "risk": "low",
+      "estimated_effort_minutes": 10,
+      "verification_method": "Review SECURITY.md for completeness",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Supported versions table",
+        "Vulnerability reporting instructions",
+        "Response time expectations",
+        "Disclosure policy"
+      ]
+    },
+    {
+      "id": "ITEM-005",
+      "priority": "P2",
+      "category": "ci",
+      "title": "Add dependency caching to CI",
+      "description": "Configure pip caching in GitHub Actions workflow",
+      "scope": {
+        "files": [".github/workflows/ci.yml"],
+        "packages": []
+      },
+      "risk": "low",
+      "estimated_effort_minutes": 10,
+      "verification_method": "Run CI twice and verify cache hit on second run",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Cache action configured for pip",
+        "Cache key based on requirements hash",
+        "CI build time reduced on cache hit"
+      ]
+    }
+  ],
+  "selected_items": ["ITEM-001", "ITEM-002", "ITEM-003"],
+  "execution_order": ["ITEM-001", "ITEM-002", "ITEM-003"],
+  "risk_analysis": {
+    "breaking_changes_possible": false,
+    "requires_manual_review": false,
+    "rollback_complexity": "trivial",
+    "affected_packages": []
+  },
+  "estimated_effort": {
+    "total_minutes": 65,
+    "confidence": "high",
+    "breakdown": {
+      "ITEM-001": 15,
+      "ITEM-002": 30,
+      "ITEM-003": 20
+    }
+  }
+}

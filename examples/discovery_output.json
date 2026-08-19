@@ -1,0 +1,137 @@
+{
+  "meta": {
+    "agent_id": "agent_discovery",
+    "timestamp": "2026-01-23T09:00:00Z",
+    "duration_ms": 4800,
+    "status": "success"
+  },
+  "repo_metadata": {
+    "name": "example-python-library",
+    "description": "A sample Python library for demonstration",
+    "primary_language": "python",
+    "repo_type": "library",
+    "loc": 5432,
+    "file_count": 47,
+    "last_commit_date": "2025-01-15T14:30:00Z",
+    "contributors": 3,
+    "open_issues": 12,
+    "open_prs": 2,
+    "stars": 156,
+    "license": "MIT"
+  },
+  "languages": [
+    {
+      "name": "python",
+      "percentage": 87.5,
+      "package_manager": "pip",
+      "lockfile_present": true,
+      "version_detected": "3.11"
+    },
+    {
+      "name": "yaml",
+      "percentage": 8.2,
+      "package_manager": null,
+      "lockfile_present": false,
+      "version_detected": null
+    },
+    {
+      "name": "markdown",
+      "percentage": 4.3,
+      "package_manager": null,
+      "lockfile_present": false,
+      "version_detected": null
+    }
+  ],
+  "tooling": {
+    "test_framework": "pytest",
+    "test_location": "tests/",
+    "linter": "ruff",
+    "formatter": "black",
+    "type_checker": "mypy",
+    "build_tool": "setuptools",
+    "ci_platform": "github_actions",
+    "ci_workflows": ["ci.yml", "release.yml"],
+    "containerization": null,
+    "iac_tool": null
+  },
+  "monorepo": null,
+  "gaps": [
+    {
+      "id": "TEST-001",
+      "category": "tests",
+      "severity": "high",
+      "title": "Low test coverage",
+      "description": "Current test coverage is 45%, below the recommended 80% threshold",
+      "impact": "Bugs may go undetected, making refactoring risky",
+      "suggested_fix": "Add unit tests for uncovered modules: auth.py, utils.py, api.py",
+      "effort_estimate": "medium",
+      "files_affected": ["src/auth.py", "src/utils.py", "src/api.py"]
+    },
+    {
+      "id": "SEC-001",
+      "category": "security",
+      "severity": "critical",
+      "title": "Missing secret scanning",
+      "description": "No pre-commit hook for secret scanning configured",
+      "impact": "Secrets could be accidentally committed to repository",
+      "suggested_fix": "Add gitleaks pre-commit hook",
+      "effort_estimate": "small",
+      "files_affected": [".pre-commit-config.yaml"]
+    },
+    {
+      "id": "DOC-001",
+      "category": "docs",
+      "severity": "medium",
+      "title": "Incomplete README",
+      "description": "README missing installation, configuration, and contributing sections",
+      "impact": "New contributors may struggle to get started",
+      "suggested_fix": "Add missing sections to README.md",
+      "effort_estimate": "small",
+      "files_affected": ["README.md"]
+    },
+    {
+      "id": "GOV-001",
+      "category": "governance",
+      "severity": "medium",
+      "title": "Missing SECURITY.md",
+      "description": "No security policy or vulnerability reporting process documented",
+      "impact": "Security researchers may not know how to report vulnerabilities",
+      "suggested_fix": "Create SECURITY.md with vulnerability reporting process",
+      "effort_estimate": "trivial",
+      "files_affected": ["SECURITY.md"]
+    },
+    {
+      "id": "CI-001",
+      "category": "ci",
+      "severity": "low",
+      "title": "No dependency caching in CI",
+      "description": "CI workflow installs dependencies from scratch on every run",
+      "impact": "Slower CI builds, wasted compute resources",
+      "suggested_fix": "Add pip caching to GitHub Actions workflow",
+      "effort_estimate": "trivial",
+      "files_affected": [".github/workflows/ci.yml"]
+    }
+  ],
+  "risk_assessment": {
+    "overall_risk": "medium",
+    "risk_factors": [
+      {
+        "factor": "Low test coverage",
+        "severity": "high",
+        "mitigation": "Add comprehensive unit tests before major changes"
+      },
+      {
+        "factor": "No secret scanning",
+        "severity": "critical",
+        "mitigation": "Immediately add pre-commit hooks for secret detection"
+      },
+      {
+        "factor": "Outdated dependencies",
+        "severity": "medium",
+        "mitigation": "Run pip-audit and update vulnerable packages"
+      }
+    ],
+    "technical_debt_score": 42,
+    "production_readiness_score": 58
+  }
+}

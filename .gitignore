@@ -5,7 +5,6 @@
 development/source-audit/reference-sha256.txt
 development/source-audit/canonical-hqe-commit.txt
 development/source-audit/canonical-rup-commit.txt
-provenance/source-manifest.sha256
 
 # Python
 __pycache__/
@@ -25,10 +24,10 @@ tests/fixtures/
 
 # RUP State & Outputs
 .rup/
-RUP_*.json
-RUP_*.md
-*_output.json
-mock_scenario_summary.json
-rup_mock_walkthrough.md
-SKILL_RUP_GITHUB_DOCS_PUBLIC_RELEASE_HANDOFF.md
+/RUP_*.json
+/RUP_*.md
+/*_output.json
+/mock_scenario_summary.json
+/rup_mock_walkthrough.md
+/SKILL_RUP_GITHUB_DOCS_PUBLIC_RELEASE_HANDOFF.md
 

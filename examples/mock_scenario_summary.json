@@ -1,0 +1,77 @@
+{
+    "scenario": {
+        "name": "inventory-api-upgrade",
+        "repository": "acme-corp/inventory-api",
+        "description": "Mock execution demonstrating RUP v3.0 end-to-end workflow",
+        "execution_date": "2026-01-23T09:00:00Z"
+    },
+    "phases": {
+        "discovery": {
+            "duration_seconds": 4.8,
+            "gaps_found": 8,
+            "critical": 2,
+            "high": 2,
+            "medium": 4,
+            "low": 1
+        },
+        "planning": {
+            "duration_seconds": 1.1,
+            "items_created": 4,
+            "items_selected": 4,
+            "estimated_effort_minutes": 50
+        },
+        "execution": {
+            "duration_seconds": 38.2,
+            "files_created": 2,
+            "files_modified": 2,
+            "commits_prepared": 4
+        },
+        "verification": {
+            "duration_seconds": 8.4,
+            "tests_passed": 15,
+            "tests_failed": 0,
+            "lint_errors": 0,
+            "lint_warnings": 47,
+            "security_issues": 0,
+            "build_success": true
+        }
+    },
+    "outcomes": {
+        "gaps_closed": 4,
+        "gaps_deferred": 4,
+        "critical_gaps_closed": 2,
+        "high_gaps_closed": 2,
+        "ready_for_merge": true
+    },
+    "bugs_found_during_review": [
+        {
+            "id": "BUG-001",
+            "title": "Missing package-lock.json generation",
+            "severity": "low",
+            "status": "fixed"
+        },
+        {
+            "id": "BUG-002",
+            "title": "Pre-commit install not documented",
+            "severity": "low",
+            "status": "documented"
+        },
+        {
+            "id": "BUG-003",
+            "title": "Coverage report artifact not saved",
+            "severity": "medium",
+            "status": "deferred"
+        },
+        {
+            "id": "BUG-004",
+            "title": "Duplicate npm ci in multi-job workflow",
+            "severity": "low",
+            "status": "deferred"
+        }
+    ],
+    "total_duration_seconds": 52.5,
+    "files": [
+        "examples/rup_mock_walkthrough.md",
+        "examples/mock_scenario_summary.json"
+    ]
+}
