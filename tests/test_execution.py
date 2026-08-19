@@ -58,7 +58,9 @@ def _write_plan_and_discovery(
     state.save_json(discovery, "RUP_DISCOVERY.json")
 
     builder = ArtifactBuilder(paths)
-    return ExecutionPhase(repo_dir, StateManager(paths), builder)
+    return ExecutionPhase(
+        repo_dir, StateManager(paths), builder, allow_exec=True, sandbox_policy="off"
+    )
 
 
 def test_dirty_tracked_and_untracked_files_not_attributed_to_rup(tmp_path):

@@ -72,6 +72,8 @@ def run_execute(
     run_id: Optional[str] = None,
     state: Optional[StateManager] = None,
     resume: bool = False,
+    allow_exec: bool = False,
+    sandbox_policy: str = "required",
 ):
     if state is not None:
         paths = state.paths
@@ -80,7 +82,7 @@ def run_execute(
         state = StateManager(paths, run_id=run_id, resume=resume)
     builder = ArtifactBuilder(paths, state=state)
     print(f"[RUP] Starting Execution...")
-    phase = ExecutionPhase(target_dir, state, builder)
+    phase = ExecutionPhase(target_dir, state, builder, allow_exec=allow_exec, sandbox_policy=sandbox_policy)
     res = phase.execute()
     state.update_session_state("execution")
     print(f"[RUP] Execution complete. Applied {len(res.get('changes', []))} changes.")
@@ -94,6 +96,8 @@ def run_verify(
     risk_tolerance: str = "medium",
     state: Optional[StateManager] = None,
     resume: bool = False,
+    allow_exec: bool = False,
+    sandbox_policy: str = "required",
 ) -> bool:
     if state is not None:
         paths = state.paths
@@ -103,7 +107,7 @@ def run_verify(
     builder = ArtifactBuilder(paths, state=state)
     effective_strict = strict or risk_tolerance == "low"
     print(f"[RUP] Starting Multi-Gate Verification (strict={effective_strict})...")
-    phase = VerificationPhase(target_dir, state, builder, strict=effective_strict)
+    phase = VerificationPhase(target_dir, state, builder, strict=effective_strict, allow_exec=allow_exec, sandbox_policy=sandbox_policy)
     out = phase.execute()
     state.update_session_state("verification")
     status = out["verification_results"]["overall_status"]
@@ -160,14 +164,29 @@ def run_full_lifecycle(
     risk_tolerance: str = "medium",
     strict: bool = False,
     override_escalation: bool = False,
+    allow_exec: bool = False,
+    sandbox_policy: str = "required",
 ) -> int:
     """Execute complete 4-phase RUP lifecycle."""
+    from .security import scan_target_for_threats
+
     paths = RupPaths(target_dir, state_dir=state_dir)
     # A full lifecycle always starts fresh; it must never silently resume a
     # completed or partially-completed previous run.
     state = StateManager(paths, resume=False)
 
     run_discovery(target_dir, state=state)
+
+    # Static adversarial scan must complete before any target-controlled code runs.
+    threats = scan_target_for_threats(target_dir)
+    if threats and not allow_exec:
+        print(
+            f"[RUP] Adversarial content detected in {len(threats)} file(s). "
+            "Use --allow-exec to opt into target-controlled execution.",
+            file=sys.stderr,
+        )
+        return 1
+
     plan_data = run_plan(
         target_dir,
         time_budget=time_budget,
@@ -185,8 +204,8 @@ def run_full_lifecycle(
         )
         return 1
 
-    run_execute(target_dir, state=state)
-    passed = run_verify(target_dir, strict=strict, risk_tolerance=risk_tolerance, state=state)
+    run_execute(target_dir, state=state, allow_exec=allow_exec, sandbox_policy=sandbox_policy)
+    passed = run_verify(target_dir, strict=strict, risk_tolerance=risk_tolerance, state=state, allow_exec=allow_exec, sandbox_policy=sandbox_policy)
     report = run_report(target_dir, state=state)
 
     ready = report.get("summary", {}).get("ready_for_submission", False)
@@ -203,6 +222,8 @@ def main():
     parser.add_argument("--strict", action="store_true", help="Fail verification on warnings or skipped gates")
     parser.add_argument("--resume", action="store_true", help="Resume an existing session (phase-only commands)")
     parser.add_argument("--override-escalation", action="store_true", help="Continue a full lifecycle even when P0 items are escalated")
+    parser.add_argument("--allow-exec", action="store_true", help="Opt into executing target-controlled commands")
+    parser.add_argument("--sandbox", choices=["required", "preferred", "off"], default="required", help="Sandbox policy for target-controlled execution")
     parser.add_argument("--version", action="version", version=f"Skill-RUP v{__version__} (Protocol v{__protocol_version__})")
 
     args = parser.parse_args()
@@ -222,6 +243,8 @@ def main():
                 risk_tolerance=args.risk_tolerance,
                 strict=args.strict,
                 override_escalation=args.override_escalation,
+                allow_exec=args.allow_exec,
+                sandbox_policy=args.sandbox,
             )
         elif args.phase == "discovery":
             run_discovery(args.target, state_dir=args.state_dir, resume=args.resume)
@@ -235,7 +258,7 @@ def main():
                 resume=args.resume,
             )
         elif args.phase == "execute":
-            run_execute(args.target, state_dir=args.state_dir, resume=args.resume)
+            run_execute(args.target, state_dir=args.state_dir, resume=args.resume, allow_exec=args.allow_exec, sandbox_policy=args.sandbox)
         elif args.phase == "verify":
             if not run_verify(
                 args.target,
@@ -243,6 +266,8 @@ def main():
                 strict=args.strict,
                 risk_tolerance=args.risk_tolerance,
                 resume=args.resume,
+                allow_exec=args.allow_exec,
+                sandbox_policy=args.sandbox,
             ):
                 print("[RUP] Verification failed.", file=sys.stderr)
                 return 1

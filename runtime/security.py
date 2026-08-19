@@ -126,7 +126,9 @@ def sandbox_available() -> bool:
         cgroup = Path("/proc/self/cgroup").read_text(encoding="utf-8", errors="ignore")
         if "docker" in cgroup or "containerd" in cgroup:
             return True
-    except Exception:
+    except Exception:  # nosec B110
+        # /proc/self/cgroup may be unreadable in restricted environments; failing
+        # sandbox detection is safe and falls back to False.
         pass
     return False
 
@@ -141,7 +143,8 @@ def scan_target_for_threats(
     for p in iter_jailed_files(root, max_bytes=max_bytes, skip_parts=skip_parts):
         try:
             content = p.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
+        except Exception:  # nosec B112
+            # Unreadable files are skipped rather than aborting the scan.
             continue
         for threat in scan_content_for_threats(content):
             threat["file"] = str(p)

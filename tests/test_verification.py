@@ -49,10 +49,19 @@ def make_phase(tmp_path):
         strict: bool = False,
         exec_data: Optional[Dict[str, Any]] = None,
         exec_state: Optional[Dict[str, Any]] = None,
+        allow_exec: bool = True,
+        sandbox_policy: str = "off",
     ):
         state = DummyStateManager(exec_data, exec_state)
         builder = DummyArtifactBuilder()
-        phase = VerificationPhase(tmp_path, state, builder, strict=strict)
+        phase = VerificationPhase(
+            tmp_path,
+            state,
+            builder,
+            strict=strict,
+            allow_exec=allow_exec,
+            sandbox_policy=sandbox_policy,
+        )
         return phase, state, builder
 
     return _make

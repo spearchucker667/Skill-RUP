@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .artifact_builder import ArtifactBuilder
 from .command_runner import run_command
+from . import security
 from .state import StateManager
 from .tool_detection import ToolDetector
 
@@ -42,6 +43,37 @@ class ExecutionPhase:
         self.tool_detector = ToolDetector(target_dir)
         self.allow_exec = allow_exec
         self.sandbox_policy = sandbox_policy
+
+    # ------------------------------------------------------------------
+    # Execution policy
+    # ------------------------------------------------------------------
+    def _can_execute_target_code(self) -> Tuple[bool, str]:
+        """Determine whether target-controlled commands may run.
+
+        Returns (allowed, reason). Execution is allowed only when explicitly
+        opted in via ``allow_exec`` and the sandbox policy is satisfied.
+        """
+        if not self.allow_exec:
+            return (
+                False,
+                "Target-controlled execution disabled; use --allow-exec to enable",
+            )
+        if self.sandbox_policy == "required" and not security.sandbox_available():
+            return (
+                False,
+                "Sandbox required but not detected; run in CI/container or use --sandbox preferred/off",
+            )
+        if self.sandbox_policy == "preferred" and not security.sandbox_available():
+            warnings.warn(
+                "Sandbox preferred but not detected; skipping target-controlled execution gates.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return (
+                False,
+                "Sandbox preferred but not detected; skipping execution gates",
+            )
+        return True, ""
 
     # ------------------------------------------------------------------
     # Git status helpers
@@ -899,6 +931,15 @@ public issue for security-sensitive findings.
 
     def _collect_baseline_coverage(self) -> Dict[str, Any]:
         """Run tests with coverage before changes to establish a true before/after delta."""
+        allowed, reason = self._can_execute_target_code()
+        if not allowed:
+            return {
+                "coverage_before": None,
+                "tests_before": 0,
+                "executed": False,
+                "reason": reason,
+            }
+
         tools = self.tool_detector.detect_all()
         framework = tools.get("test_framework")
         test_cmd = self._test_command(framework)
@@ -1046,6 +1087,20 @@ public issue for security-sensitive findings.
     def _verify_item(
         self, item: Dict[str, Any], tools: Dict[str, Any]
     ) -> Dict[str, Any]:
+        allowed, reason = self._can_execute_target_code()
+        if not allowed:
+            not_run = {
+                "executed": False,
+                "passed": False,
+                "tool": None,
+                "details": reason,
+            }
+            return {
+                "tests": not_run,
+                "lint": not_run,
+                "type_check": not_run,
+                "build": not_run,
+            }
         return {
             "tests": self._run_verification_gate(
                 tools.get("test_framework"),

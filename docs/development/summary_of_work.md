@@ -1268,3 +1268,51 @@ None.
 
 ### Next Actions
 - Monitor GitHub Actions on the merged `main` to confirm the dependabot action-version bumps do not break the refactored CI topology.
+
+---
+
+## 2026-08-19 - P0 Remediation: execution constraints, fail-closed verification, jailed symlinks, and adversarial execution gating
+
+**Agent**: Kimi Code CLI  
+**Branch**: `p0-remediation`  
+**Task**: Close the four P0 findings from the 2026-08-19 static source audit on `Skill-RUP/main`.
+
+### Accomplishments
+- **RUP-XFER-001 — Execution reads planning constraints from `plan-state.json`** (already on branch): `ExecutionPhase.execute()` now loads constraints from `plan-state.json` first, with a legacy fallback from `RUP_PLAN.json` that emits a `DeprecationWarning`. Added integration test proving planner-to-executor constraint propagation.
+- **RUP-VERIFY-001 — Tool gates fail closed on command failure** (already on branch): lint, build, and type-check results now carry `command_succeeded`/`succeeded`/`passed`, and gate success requires both successful execution and the relevant success metric. Added regression test for a linter crash returning `rc=1` with empty stdout.
+- **RUP-SEC-001 — File symlinks bypass the target-repository jail** (already on branch): added `runtime/security.py::iter_jailed_files()` and migrated inventory, discovery, verification, provenance, and redaction scanners to consume it. Added unit tests and a forward fixture with a file symlink to an external sentinel.
+- **RUP-SEC-002 — Untrusted target code executes before the adversarial-content gate** (completed in this session):
+  - Wired `allow_exec` and `sandbox_policy` through `ExecutionPhase` and `VerificationPhase`.
+  - Added `_can_execute_target_code()` helper that refuses target-controlled execution unless `--allow-exec` is supplied and the sandbox policy is satisfied.
+  - Gated `ExecutionPhase._collect_baseline_coverage()` and `_verify_item()`.
+  - Gated `VerificationPhase._run_tests_with_flakiness()`, `_run_build()`, and `_run_type_check()`.
+  - Hardened `runtime/command_runner.py` to scrub the subprocess environment against an allowlist and cap captured stdout/stderr to `DEFAULT_MAX_OUTPUT_BYTES` (5 MiB).
+  - Added `tests/test_cli_security.py` with lifecycle regression tests for adversarial-content blocking and sandbox-required gating.
+- Fixed two Bandit findings (`B110`, `B112`) in `runtime/security.py` with documented `# nosec` rationales.
+
+### Files Changed
+- `runtime/execution.py`
+- `runtime/verification.py`
+- `runtime/command_runner.py`
+- `runtime/security.py`
+- `tests/test_execution.py`
+- `tests/test_verification.py`
+- `tests/test_cli_security.py`
+- `docs/development/summary_of_work.md` (this entry)
+
+### Validation Results
+- `python -m pytest tests/ -q` — **157 passed**, 14 warnings.
+- `python scripts/generate_schemas_templates.py --check` — PASS.
+- `python scripts/generate_workflows.py --check` — PASS.
+- `python scripts/build_capability_map.py --check` — PASS.
+- `python scripts/audit_sources.py --check` — **63/63 passed**.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` — 20/20 valid.
+- `bandit -r runtime scripts -c bandit.yaml` — no issues.
+- `python -m compileall runtime scripts` — no syntax errors.
+
+### Unresolved Blockers
+None.
+
+### Next Actions
+- Open a pull request from `p0-remediation` to `main` and request review.
+- Monitor CI for the new CLI security tests and command-runner environment changes.

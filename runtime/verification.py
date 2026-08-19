@@ -22,6 +22,7 @@ from .artifact_builder import ArtifactBuilder
 from .command_runner import run_command
 from .inventory import InventoryManager
 from .redaction import scan_file_for_secrets
+from . import security
 from .security import scan_content_for_threats, iter_jailed_files
 from .state import StateManager
 from .tool_detection import ToolDetector
@@ -34,15 +35,50 @@ class VerificationPhase:
         state_manager: StateManager,
         artifact_builder: ArtifactBuilder,
         strict: bool = False,
+        allow_exec: bool = False,
+        sandbox_policy: str = "required",
     ):
         self.target_dir = target_dir
         self.state_manager = state_manager
         self.artifact_builder = artifact_builder
         self.strict = strict
+        self.allow_exec = allow_exec
+        self.sandbox_policy = sandbox_policy
         self._tools = ToolDetector(target_dir).detect_all()
         self._primary_language = InventoryManager(target_dir).analyze_inventory().get(
             "primary_language", "unknown"
         )
+
+    # ------------------------------------------------------------------
+    # Execution policy
+    # ------------------------------------------------------------------
+    def _can_execute_target_code(self) -> Tuple[bool, str]:
+        """Determine whether target-controlled commands may run.
+
+        Returns (allowed, reason). Execution is allowed only when explicitly
+        opted in via ``allow_exec`` and the sandbox policy is satisfied.
+        """
+        if not self.allow_exec:
+            return (
+                False,
+                "Target-controlled execution disabled; use --allow-exec to enable",
+            )
+        if self.sandbox_policy == "required" and not security.sandbox_available():
+            return (
+                False,
+                "Sandbox required but not detected; run in CI/container or use --sandbox preferred/off",
+            )
+        if self.sandbox_policy == "preferred" and not security.sandbox_available():
+            warnings.warn(
+                "Sandbox preferred but not detected; skipping target-controlled execution gates.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return (
+                False,
+                "Sandbox preferred but not detected; skipping execution gates",
+            )
+        return True, ""
 
     # ------------------------------------------------------------------
     # Helpers
@@ -333,6 +369,10 @@ class VerificationPhase:
 
     def _run_tests_with_flakiness(self) -> Dict[str, Any]:
         """Execute test runner 3x to detect flakiness and gather real pass/fail counts."""
+        allowed, reason = self._can_execute_target_code()
+        if not allowed:
+            return self._schema_test_not_run("skipped", reason)
+
         cmd = self._test_command()
 
         if cmd is None:
@@ -488,6 +528,10 @@ class VerificationPhase:
         return combined.count("warning:")
 
     def _run_build(self) -> Dict[str, Any]:
+        allowed, reason = self._can_execute_target_code()
+        if not allowed:
+            return self._schema_build_not_run("skipped", reason)
+
         build_tool = self._tools.get("build_tool")
         if build_tool is None:
             return self._schema_build_not_run("unavailable", "No build tool detected")
@@ -538,6 +582,10 @@ class VerificationPhase:
     # Type check
     # ------------------------------------------------------------------
     def _run_type_check(self) -> Dict[str, Any]:
+        allowed, reason = self._can_execute_target_code()
+        if not allowed:
+            return self._schema_type_check_not_run("skipped", reason)
+
         type_checker = self._tools.get("type_checker")
         if type_checker is None:
             return self._schema_type_check_not_run("unavailable", "No type checker configured or detected")
