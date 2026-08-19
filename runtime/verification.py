@@ -22,7 +22,7 @@ from .artifact_builder import ArtifactBuilder
 from .command_runner import run_command
 from .inventory import InventoryManager
 from .redaction import scan_file_for_secrets
-from .security import scan_content_for_threats
+from .security import scan_content_for_threats, iter_jailed_files
 from .state import StateManager
 from .tool_detection import ToolDetector
 
@@ -71,15 +71,7 @@ class VerificationPhase:
             ".git", ".venv", "venv", "node_modules", "dist", "build", ".rup",
             "__pycache__", ".pytest_cache", ".coverage", "htmlcov", ".tox",
         }
-        for p in self.target_dir.rglob("*"):
-            if p.is_file() and not any(part in p.parts for part in skip_parts):
-                include = False
-                try:
-                    include = p.stat().st_size <= 5 * 1024 * 1024
-                except Exception:
-                    include = False
-                if include:
-                    yield p
+        yield from iter_jailed_files(self.target_dir, max_bytes=5 * 1024 * 1024, skip_parts=skip_parts)
 
     def _run_tool(self, cmd: List[str], timeout: int = 300) -> Tuple[int, str, str]:
         if not cmd:
