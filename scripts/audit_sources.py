@@ -121,12 +121,43 @@ def main() -> int:
         report = verify_transfer_manifest(ROOT, transfer_manifest, upstream_dir)
 
         if args.check:
-            status = "PASS" if report["valid"] else "FAIL"
+            check_ok = report["valid"]
+            if source_path.exists() and sha_path.exists():
+                source_index = json.loads(source_path.read_text(encoding="utf-8"))
+                canonical_rel = source_index.get("manifests", {}).get("canonical_source")
+                if canonical_rel:
+                    canonical_file = ROOT / canonical_rel
+                    if canonical_file.exists():
+                        actual_hash = hashlib.sha256(canonical_file.read_bytes()).hexdigest()
+                        expected_hash = sha_path.read_text(encoding="utf-8").strip().split()[0]
+                        if actual_hash != expected_hash:
+                            print(
+                                f"Error: source-manifest.sha256 does not match {canonical_rel} "
+                                f"(expected {expected_hash}, got {actual_hash})",
+                                file=sys.stderr,
+                            )
+                            check_ok = False
+                        elif source_index.get("canonical_commit") != canonical_manifest.get("canonical_commit"):
+                            print(
+                                "Error: source-manifest.json canonical_commit does not match canonical-source-manifest.json",
+                                file=sys.stderr,
+                            )
+                            check_ok = False
+                    else:
+                        print(f"Error: canonical source manifest not found: {canonical_file}", file=sys.stderr)
+                        check_ok = False
+                else:
+                    print("Error: source-manifest.json is missing canonical_source reference", file=sys.stderr)
+                    check_ok = False
+            else:
+                print("Warning: source-manifest.json or source-manifest.sha256 missing; skipping index consistency check", file=sys.stderr)
+
+            status = "PASS" if check_ok else "FAIL"
             print(f"[{status}] Transfer verification: {report['passed']}/{report['checked']} passed")
             if not report["valid"]:
                 for failure in report["failures"]:
                     print(f"  - {failure['source_path']} -> {failure['destination_path']}: {failure['reason']}", file=sys.stderr)
-            return 0 if report["valid"] else 1
+            return 0 if check_ok else 1
 
         # Write the manifests.
         _write_json(canonical_path, canonical_manifest)
