@@ -14,7 +14,7 @@ from pathlib import Path
 from .inventory import InventoryManager, LOCKFILES
 from .tool_detection import ToolDetector
 from .redaction import scan_file_for_secrets
-from .security import scan_content_for_threats
+from .security import scan_content_for_threats, iter_jailed_files
 from .state import StateManager
 from .artifact_builder import ArtifactBuilder
 
@@ -74,11 +74,11 @@ class DiscoveryPhase:
         # --- 1.4 Security Gaps ---
         # Secret Scanning
         secret_findings = []
-        for p in self.target_dir.rglob("*"):
-            if p.is_file() and not any(part in p.parts for part in [".git", ".venv", "node_modules", "dist", "build", ".rup"]):
-                findings = scan_file_for_secrets(p)
-                if findings:
-                    secret_findings.extend(findings)
+        skip_parts = {".git", ".venv", "node_modules", "dist", "build", ".rup"}
+        for p in iter_jailed_files(self.target_dir, skip_parts=skip_parts):
+            findings = scan_file_for_secrets(p)
+            if findings:
+                secret_findings.extend(findings)
 
         if secret_findings:
             gaps.append({
