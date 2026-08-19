@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-18T20:54:47.419762Z",
+  "generated_at": "2026-08-19T00:15:03.428604Z",
   "canonical_repository": "https://github.com/spearchucker667/RUP-Protocol",
   "canonical_commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb",
   "canonical_protocol_version": "3.0.0",
@@ -620,14 +620,14 @@
       "source_git_blob_sha": "748ae29e7a681b15beff2b42bd865e329aa8d510",
       "source_sha256": "f1f4cf03f7e7491aed1fe42dc4d953b74920ad73b63b0c6d33e0d18a2d0879a7",
       "destination_path": "protocol/rup-schema.json",
-      "transfer_type": "derived",
+      "transfer_type": "exact_copy",
       "transformation_tool": null,
-      "destination_sha256": "fd63c62495235848e47dac4534f0dca004d499741bfb60babb3adfcfdf758edc",
-      "destination_git_blob_sha": "959a0874479e9b188e47f1f1936feb4a8ea2ed1d",
+      "destination_sha256": "f1f4cf03f7e7491aed1fe42dc4d953b74920ad73b63b0c6d33e0d18a2d0879a7",
+      "destination_git_blob_sha": "748ae29e7a681b15beff2b42bd865e329aa8d510",
       "parity_tests": [
         "tests/test_validator_cli.py::test_canonical_invocation_all"
       ],
-      "rationale": "Adapted and extended locally from the canonical upstream source for the Skill-RUP implementation."
+      "rationale": "Copied verbatim from the canonical upstream source."
     },
     {
       "source_path": "security/.gitkeep",

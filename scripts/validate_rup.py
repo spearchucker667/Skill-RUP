@@ -136,6 +136,32 @@ def load_schema(schema_path: Optional[Path] = None) -> Dict[str, Any]:
         return json.load(f)
 
 
+def _resolve_derived_schema_path(schema_path: Optional[Path] = None) -> Optional[Path]:
+    """Locate the Skill-RUP derived protocol schema extension.
+
+    The canonical protocol schema lives at ``protocol/rup-schema.json`` and must
+    remain a byte-for-byte copy of the upstream source. Downstream extensions
+    (constraints, execution recommendations/rollback, prompt-injection scan,
+    tool/reason metadata) live in ``schemas/rup-schema-derived.schema.json``.
+    """
+    if schema_path is None:
+        return None
+    repo_root = Path(schema_path).parent.parent.resolve()
+    derived = repo_root / "schemas" / "rup-schema-derived.schema.json"
+    if derived.is_file():
+        return derived
+    return None
+
+
+def load_derived_schema(schema_path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    """Load the Skill-RUP derived protocol schema extension if it exists."""
+    p = _resolve_derived_schema_path(schema_path)
+    if p is None:
+        return None
+    with open(p, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def _resolve_schemas_dir(schema_path: Optional[Path] = None) -> Optional[Path]:
     """Locate the derived-schemas directory relative to the canonical schema.
 
@@ -281,9 +307,17 @@ def validate_protocol(
 def validate_agent_output(
     output_data: Dict[str, Any],
     output_type: str,
-    schema: Dict[str, Any]
+    schema: Dict[str, Any],
+    derived_schema: Optional[Dict[str, Any]] = None,
 ) -> Tuple[bool, List[ValidationError]]:
-    """Validate an agent output against the appropriate sub-schema."""
+    """Validate an agent output against the appropriate sub-schema.
+
+    When ``derived_schema`` is supplied, output definitions are resolved from
+    the derived schema first. This lets Skill-RUP keep ``protocol/rup-schema.json``
+    byte-for-byte canonical while validating downstream runtime extensions
+    (constraints, recommendations/rollback, prompt-injection scan, tool/reason
+    metadata) against ``schemas/rup-schema-derived.schema.json``.
+    """
     # Map output types to schema definitions
     type_map = {
         'discovery': 'DiscoveryReport',
@@ -291,25 +325,27 @@ def validate_agent_output(
         'execution': 'ExecutionOutput',
         'verification': 'VerificationOutput'
     }
-    
+
     if output_type not in type_map:
         raise ValueError(f"Unknown output type: {output_type}. Valid types: {list(type_map.keys())}")
-    
+
     def_name = type_map[output_type]
-    
-    if '$defs' not in schema or def_name not in schema['$defs']:
+
+    # Prefer the derived schema for output definitions; fall back to canonical.
+    effective_schema = derived_schema if derived_schema is not None else schema
+    if '$defs' not in effective_schema or def_name not in effective_schema['$defs']:
         raise ValueError(f"Schema definition not found: {def_name}")
-    
+
     # Create a wrapper schema that references the definition
     # This allows the validator to properly resolve $refs
     wrapper_schema = {
         "$ref": f"#/$defs/{def_name}",
-        "$defs": schema.get("$defs", {})
+        "$defs": effective_schema.get("$defs", {})
     }
-    
+
     format_checker = Draft202012Validator.FORMAT_CHECKER
     validator = Draft202012Validator(wrapper_schema, format_checker=format_checker)
-    
+
     errors = list(validator.iter_errors(output_data))
     return len(errors) == 0, errors
 
@@ -362,13 +398,14 @@ def cmd_validate_output(args: argparse.Namespace) -> int:
     """Validate an agent output JSON file."""
     try:
         schema = load_schema(args.schema)
+        derived_schema = load_derived_schema(args.schema)
         output = load_json(Path(args.file))
-        
-        valid, errors = validate_agent_output(output, args.type, schema)
+
+        valid, errors = validate_agent_output(output, args.type, schema, derived_schema)
         print_result(Path(args.file), valid, errors, args.verbose)
-        
+
         return 0 if valid else 1
-    
+
     except FileNotFoundError as e:
         print(f"{colorize('Error:', Colors.RED)} {e}")
         return 1
@@ -412,6 +449,8 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
     except FileNotFoundError as e:
         print(f"{colorize('Error:', Colors.RED)} {e}")
         return 1
+
+    derived_schema = load_derived_schema(args.schema)
 
     schemas_dir = _resolve_schemas_dir(schema_path)
     derived_schemas: Dict[str, Dict[str, Any]] = {}
@@ -477,7 +516,9 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
                 seen_files.add(resolved_str)
                 try:
                     output = load_json(file_path)
-                    valid, errors = validate_agent_output(output, output_type, schema)
+                    valid, errors = validate_agent_output(
+                        output, output_type, schema, derived_schema
+                    )
                     results.append((file_path, valid, errors))
                 except Exception as e:
                     print(f"{colorize('Warning:', Colors.YELLOW)} Could not validate {file_path}: {e}")
@@ -637,16 +678,21 @@ def cmd_sample(args: argparse.Namespace) -> int:
 
 
 def _add_common_args(p: argparse.ArgumentParser) -> None:
-    """Add schema and verbose options to a subparser so they can appear after the subcommand."""
+    """Add schema and verbose options to a subparser so they can appear after the subcommand.
+
+    Using ``argparse.SUPPRESS`` as the default prevents a subparser that did not
+    receive the option from overwriting the global value with its default.
+    """
     p.add_argument(
         '--schema', '-s',
         type=Path,
-        default=Path(os.getenv('RUP_SCHEMA_PATH')) if os.getenv('RUP_SCHEMA_PATH') else None,
+        default=argparse.SUPPRESS,
         help='Path to rup-schema.json (default: same directory as script or RUP_SCHEMA_PATH)'
     )
     p.add_argument(
         '--verbose', '-v',
         action='store_true',
+        default=argparse.SUPPRESS,
         help='Show all validation errors'
     )
 

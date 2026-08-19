@@ -1932,6 +1932,32 @@
               }
             }
           }
+        },
+        "constraints": {
+          "type": "object",
+          "required": [
+            "time_budget_minutes",
+            "max_files",
+            "risk_tolerance"
+          ],
+          "properties": {
+            "time_budget_minutes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_files": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "risk_tolerance": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            }
+          }
         }
       },
       "additionalProperties": false
@@ -2169,6 +2195,9 @@
         },
         "passed": {
           "type": "boolean"
+        },
+        "tool": {
+          "type": ["string", "null"]
         },
         "details": {
           "type": "string"
