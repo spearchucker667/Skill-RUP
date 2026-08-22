@@ -176,6 +176,7 @@ jobs:
                   check=True,
               )
               state_dir = target / ".pulumi-state"
+              state_dir.mkdir(parents=True, exist_ok=True)
               subprocess.run(
                   ["pulumi", "login", state_dir.resolve().as_uri()],
                   cwd=target,

@@ -2028,3 +2028,34 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
 - Push the branch and confirm `terraform-validation`, `pulumi-validation`,
   `required`, `Security Scan / CodeQL`, and `Release Package` (if triggered)
   pass on the runner.
+
+## 2026-08-22 - Session: Create Pulumi local backend directory before login
+
+### Accomplishments
+- **Fixed `pulumi-validation` backend directory bug**: added
+  `state_dir.mkdir(parents=True, exist_ok=True)` before `pulumi login` in
+  `.github/workflows/ci.yml`. The local file backend (`file://.../.pulumi-state`)
+  requires the directory to exist before Pulumi can open it; without this, the
+  login step failed with `no such file or directory` before the runtime ever
+  reached `pulumi preview`.
+
+### Validation Results
+- `.github/workflows/ci.yml` YAML syntax validated.
+- `python -m pytest tests/` — 223 passed.
+- `python scripts/forward_test.py --fixtures tests/fixtures` — 14/14 passed.
+- `python scripts/generate_schemas_templates.py --check` PASS.
+- `python scripts/generate_workflows.py --check` PASS.
+- `python scripts/build_capability_map.py --check` PASS.
+- `python scripts/audit_sources.py --check` PASS.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` — 40 valid.
+- `bandit -r runtime scripts -c bandit.yaml` — 0 issues.
+- `python -m compileall runtime scripts` — clean.
+
+### Open Blockers
+- None. The actual `pulumi login` + `pulumi preview` path still cannot be
+  exercised locally without the Pulumi CLI, but the missing-directory root cause
+  is addressed.
+
+### Next Actions
+- Push and confirm `pulumi-validation` reaches `pulumi preview` and the
+  `operations["pulumi_preview"]` assertion passes on the runner.
