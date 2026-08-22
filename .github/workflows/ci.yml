@@ -6,9 +6,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Temporarily disabled during CI repair so every push produces a complete
-  # run history instead of cancelling the previous one.
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   test:

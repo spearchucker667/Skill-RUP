@@ -2173,3 +2173,63 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
 - Confirm CI, Forward Tests, Validate Skill, and Security Scan at the exact
   pushed SHA. If the stable CI run is green, restore `ci.yml`
   `cancel-in-progress: true` in a follow-up commit and revalidate.
+
+## 2026-08-22 - Session: Windows provenance normalization follow-up
+
+### Accomplishments
+- **Used hosted follow-through instead of local inference**: pushed
+  `d4c543a33df3748537123af24062dcbddc824f66` and monitored CI run
+  `32565273861`. Pulumi, Terraform, integrity, Ubuntu, and macOS all passed;
+  Windows exposed one remaining offline provenance failure.
+- **Fixed the Windows root cause**: `compute_git_blob_sha()` previously hashed
+  raw working-tree bytes even inside a Git repository. On Windows with
+  `core.autocrlf`, that disagreed with the normalized blob in Git's index/tree.
+  The helper now uses `git hash-object --path` inside a worktree so configured
+  clean filters are honored, with deterministic raw-byte hashing retained for
+  files outside Git repositories.
+- **Added cross-platform regression coverage**: the new test writes CRLF bytes,
+  enables `core.autocrlf`, stages the file, and proves the helper matches the
+  actual Git index object. The test failed before the runtime fix and passes
+  after it on macOS, reproducing the Windows mechanism without a Windows host.
+- **Restored normal concurrency**: returned CI to `cancel-in-progress: true`
+  after the stable hosted run completed enough jobs to validate the repair
+  paths.
+
+### Validation Results
+- Pre-fix regression:
+  `python -m pytest
+  tests/test_provenance.py::test_compute_git_blob_sha_honors_worktree_filters
+  -q` — FAIL as expected (`f0a307...` raw CRLF blob versus `a8926a...`
+  Git-normalized blob).
+- Post-fix focused regression:
+  `python -m pytest
+  tests/test_provenance.py::test_compute_git_blob_sha_honors_worktree_filters
+  tests/test_provenance.py::test_omissions_never_increase_transfer_pass_count
+  -q` — **2 passed**.
+- `python -m pytest tests/test_provenance.py -q -m "not online"` — **15
+  passed, 1 deselected**.
+- `python -m compileall runtime scripts` — PASS.
+- `python -m pytest tests/ -q` — **229 passed**, 23 expected warnings.
+- `python scripts/forward_test.py --fixtures tests/fixtures` — **14/14 passed**.
+- `python scripts/generate_schemas_templates.py --check` — PASS (10 schemas).
+- `python scripts/generate_workflows.py --check` — PASS (18 workflows).
+- `python scripts/build_capability_map.py --check` — PASS (27 capabilities).
+- `python scripts/audit_sources.py --check` — PASS (63/63 paths accounted for).
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` —
+  **40/40 valid**.
+- `bandit -r runtime scripts -c bandit.yaml` — PASS, 0 issues.
+- v3.0.2 validation package build and `--verify` — PASS, 370 file hashes;
+  validation output restored afterward to preserve the immutable release asset.
+- `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color` — PASS.
+- Hosted run `32565273861` at `d4c543a`: Pulumi PASS, Terraform PASS,
+  integrity PASS, Ubuntu PASS, macOS PASS; Windows FAIL only at the now-fixed
+  CRLF provenance regression; aggregate `required` failed solely because of
+  Windows.
+
+### Open Blockers
+- The final commit still requires exact-SHA hosted verification across all four
+  workflows. No local validation blocker remains.
+
+### Next Actions
+- Commit and push this follow-up on local `main`, then require a completely
+  green CI/Forward Tests/Validate Skill/Security Scan result at the final SHA.

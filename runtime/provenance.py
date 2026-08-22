@@ -381,11 +381,36 @@ def compute_sha256(file_path: Path) -> str:
 
 
 def compute_git_blob_sha(file_path: Path, cwd: Optional[Path] = None) -> str:
-    """Compute Git blob SHA (100%% equivalent to ``git hash-object``).
+    """Compute the Git blob SHA for ``file_path``.
 
     SHA-1 is used here only to reproduce Git's object identifier for
     provenance/lineage comparison, not for any security purpose.
+
+    Inside a Git worktree, ``git hash-object --path`` is authoritative because
+    it applies path-specific clean filters such as CRLF normalization. Raw-byte
+    hashing is the deterministic fallback for files outside a worktree.
     """
+    if cwd is not None:
+        resolved_cwd = cwd.resolve()
+        try:
+            relative_path = file_path.resolve().relative_to(resolved_cwd)
+        except ValueError:
+            relative_path = None
+
+        if relative_path is not None:
+            rc, inside_worktree, _ = run_command(
+                ["git", "rev-parse", "--is-inside-work-tree"],
+                cwd=resolved_cwd,
+            )
+            if rc == 0 and inside_worktree.strip() == "true":
+                git_path = relative_path.as_posix()
+                rc, stdout, _ = run_command(
+                    ["git", "hash-object", "--path", git_path, git_path],
+                    cwd=resolved_cwd,
+                )
+                if rc == 0 and stdout.strip():
+                    return stdout.strip()
+
     try:
         data = file_path.read_bytes()
         header = f"blob {len(data)}\0".encode("ascii")

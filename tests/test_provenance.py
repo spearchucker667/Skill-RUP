@@ -368,6 +368,30 @@ def test_clone_upstream_commit_clones_and_checks_out_commit(
     assert cloned_head.strip() == commit
 
 
+def test_compute_git_blob_sha_honors_worktree_filters(tmp_path: Path):
+    """Tracked CRLF content must hash like Git's normalized tree object."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "--quiet"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "core.autocrlf", "true"],
+        cwd=repo,
+        check=True,
+    )
+    source = repo / "source.yaml"
+    source.write_bytes(b"a: 1\r\n")
+    subprocess.run(["git", "add", "source.yaml"], cwd=repo, check=True)
+    expected = subprocess.run(
+        ["git", "rev-parse", ":source.yaml"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    assert compute_git_blob_sha(source, cwd=repo) == expected
+
+
 @pytest.mark.online
 def test_audit_sources_check_mode():
     """Smoke-test the audit_sources.py --check mode against the real manifests."""
