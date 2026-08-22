@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.0.0] - 2026-08-21
 ### Added
 - Complete RUP Protocol v3.0.0 synchronization.
 - Agent workflow projections in `workflows/`.
@@ -51,3 +51,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Refactored `SKILL.md` to properly route sub-workflows and enforce schema validation.
 - Restructured `runtime/` to strictly return typed outputs and adhere to Schema Draft 2020-12.
+
+[3.0.0]: https://github.com/spearchucker667/Skill-RUP/compare/338c5675dab2479a3a4f2ac6d70fd0a12c250847...v3.0.0
