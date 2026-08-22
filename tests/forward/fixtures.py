@@ -145,17 +145,53 @@ def build_ops_workstreams(target_dir: Path) -> None:
     Discovery must flag CONT-001 (no Dockerfile), IAC-001 (no Terraform/Pulumi),
     and OBS-001 (no observability baseline); execution must scaffold the
     Dockerfile/.dockerignore/docker-compose.yml, terraform/, and
-    docs/observability.md through the real CLI lifecycle.
+    docs/observability.md through the real CLI lifecycle. Package ``__init__``
+    files keep the fixture mypy-clean when a type checker is installed.
     """
     _write(
+        target_dir / "src" / "__init__.py",
+        "",
+    )
+    _write(
         target_dir / "src" / "app.py",
-        "def handler(request):\n    return {'status': 'ok'}\n",
+        "def handler(request: dict) -> dict:\n    return {'status': 'ok'}\n",
+    )
+    _write(
+        target_dir / "tests" / "__init__.py",
+        "",
     )
     _write(
         target_dir / "tests" / "test_app.py",
-        "from src.app import handler\n\ndef test_handler():\n    assert handler({})['status'] == 'ok'\n",
+        "from src.app import handler\n\ndef test_handler() -> None:\n    assert handler({})['status'] == 'ok'\n",
     )
     _write(target_dir / "requirements.txt", "# runtime deps\n")
+
+
+def build_pulumi_project(target_dir: Path) -> None:
+    """Python Pulumi project (canonical iac_validator pulumi path).
+
+    Discovery flags IAC-001 (Pulumi alone is not detected as IaC by the
+    gap check) and execution scaffolds the Terraform baseline; verification
+    exercises ``pulumi preview`` on the Pulumi project when pulumi is on PATH.
+    """
+    _write(
+        target_dir / "Pulumi.yaml",
+        "name: demo\nruntime: python\ndescription: Pulumi fixture\n",
+    )
+    _write(
+        target_dir / "__main__.py",
+        "import pulumi\n\n"
+        "bucket = pulumi.Config().get('bucket') or 'demo'\n"
+        "pulumi.export('bucket', bucket)\n",
+    )
+    _write(
+        target_dir / "requirements.txt",
+        "pulumi>=3.0\n",
+    )
+    _write(
+        target_dir / "tests" / "test_demo.py",
+        "def test_nothing() -> None:\n    assert True\n",
+    )
 
 
 def build_workspace(target_dir: Path) -> None:
@@ -190,6 +226,7 @@ BUILDERS = {
     "adversarial_content": build_adversarial_content,
     "workspace": build_workspace,
     "ops_workstreams": build_ops_workstreams,
+    "pulumi_project": build_pulumi_project,
 }
 
 

@@ -1049,6 +1049,7 @@ class VerificationPhase:
         failed_any = False
 
         if has_tf:
+            operations["iac_security"] = self._run_iac_security_scan()
             if not self._tool_available("terraform"):
                 operations["terraform_validate"] = self._gate_not_run(
                     "unavailable",
@@ -1104,7 +1105,6 @@ class VerificationPhase:
                     else:
                         failed_any = True
 
-            operations["iac_security"] = self._run_iac_security_scan()
             if operations["iac_security"].get("executed"):
                 executed_any = True
                 if operations["iac_security"].get("passed"):
@@ -1144,10 +1144,12 @@ class VerificationPhase:
                 op.get("reason", op.get("status", "unavailable"))
                 for op in operations.values()
             ]
-            return self._gate_not_run(
+            result = self._gate_not_run(
                 "unavailable",
                 " | ".join(unavailable) or "IaC tooling unavailable",
             )
+            result["operations"] = operations
+            return result
 
         return {
             "executed": True,
@@ -1439,6 +1441,9 @@ class VerificationPhase:
                             "status": iac_result.get("status"),
                             "reason": iac_result.get("reason"),
                             "tool": iac_result.get("tool"),
+                            # Per-operation detail (terraform_validate /
+                            # pulumi_preview / iac_security) for auditability.
+                            "operations": iac_result.get("operations", {}) or {},
                         },
                     },
                 },

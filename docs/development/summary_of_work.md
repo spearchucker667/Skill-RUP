@@ -1886,3 +1886,49 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
 ### Next Actions
 - Install tfsec (or checkov) in the terraform-validation CI job so the security
   operation executes on every push.
+
+## 2026-08-22 - Session: Gate reconciliation, pulumi fixture + CI, checkov, iac_scan forward pin
+
+### Accomplishments
+- **Fixture mypy-clean**: the `ops_workstreams` fixture now ships `src/__init__.py`
+  and `tests/__init__.py` plus annotated `handler(request: dict) -> dict` /
+  `test_handler() -> None`, so the type_check gate passes when mypy is installed
+  (verified locally: mypy rc 0 over the fixture). The pip-audit finding is
+  environmental — the installed `pip` itself carries a vulnerability; the
+  fixture repo declares no runtime deps — and CI installs no audit tool, so the
+  gate is `unavailable` there. `ready_for_submission` additionally requires all
+  selected items COMPLETE; the containerization/IaC/observability workstreams
+  are PARTIAL by design (agent follow-up), so that fixture intentionally reports
+  not-ready. The iac_scan gate itself passes with terraform + checkov on PATH
+  (verified end-to-end: terraform_validate passed, iac_security executed via
+  checkov with 0 findings).
+- **iac_scan forward pin**: `ops_workstreams` forward check now asserts
+  `iac_scan.passed is True` when terraform is on PATH, pinning the end-to-end
+  IaC validation in the suite.
+- **Pulumi coverage**: new `pulumi_project` fixture (Pulumi.yaml + `__main__.py`)
+  plus forward check asserting the `pulumi_preview` operation exists and passes
+  with pulumi installed / reports unavailable without it. The iac_scan audit
+  entry now carries the per-operation map (`operations`) so downstream tooling
+  can see each operation.
+- **CI**: `terraform-validation` installs checkov (canonical iac_validator
+  security operation) and runs it against the generated baseline (verified
+  locally: checkov rc 0, 0 failed checks); new `pulumi-validation` job sets up
+  Pulumi 3.150 and asserts the iac_scan gate passes with pulumi on PATH; the
+  `required` job gates on both.
+
+### Validation Results
+- `pytest tests/` 221 passed; forward fixtures 14/14 (new `pulumi_project`).
+- Local: terraform init+validate rc 0; checkov 0 findings; iac_scan gate
+  passed with terraform + checkov on PATH.
+- `build_capability_map --check` PASS; `audit_sources --check` PASS;
+  `validate_rup` 40 valid; schemas/workflows `--check` PASS; `bandit` 0 issues;
+  `compileall` clean.
+
+### Open Blockers
+- None. Remaining environmental note: pip-audit flags the host's installed pip
+  when run locally; CI does not install pip-audit, and the fixture repo declares
+  no vulnerable dependencies.
+
+### Next Actions
+- Watch the `pulumi-validation` and `terraform-validation` CI jobs on the next
+  push; adjust if the pinned action versions drift.

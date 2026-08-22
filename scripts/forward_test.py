@@ -251,6 +251,37 @@ def check_fixture_specific(target_dir: Path, fixture_name: str) -> List[str]:
         else:
             errors.append("ops_workstreams fixture: terraform/main.tf was not generated")
 
+        # Pin the end-to-end IaC proof: when terraform is on PATH, the iac_scan
+        # gate must have run and passed against the generated baseline.
+        if shutil.which("terraform") is not None:
+            verification = json.loads(
+                (state_dir / "RUP_VERIFICATION.json").read_text(encoding="utf-8")
+            )
+            iac = verification["audit_trail"][0]["details"]["gates"].get("iac_scan", {})
+            if iac.get("executed") is not True or iac.get("passed") is not True:
+                errors.append(
+                    f"ops_workstreams fixture: iac_scan should pass with terraform on PATH, got {iac}"
+                )
+
+    if fixture_name == "pulumi_project":
+        verification = json.loads(
+            (state_dir / "RUP_VERIFICATION.json").read_text(encoding="utf-8")
+        )
+        iac = verification["audit_trail"][0]["details"]["gates"].get("iac_scan", {})
+        operations = iac.get("operations", {}) or {}
+        if "pulumi_preview" not in operations:
+            errors.append("pulumi_project fixture: iac_scan missing pulumi_preview operation")
+        if shutil.which("pulumi") is not None:
+            if iac.get("passed") is not True:
+                errors.append(
+                    f"pulumi_project fixture: iac_scan should pass with pulumi on PATH, got {iac}"
+                )
+        else:
+            if operations.get("pulumi_preview", {}).get("status") != "unavailable":
+                errors.append(
+                    "pulumi_project fixture: pulumi_preview should report unavailable without pulumi"
+                )
+
     return errors
 
 

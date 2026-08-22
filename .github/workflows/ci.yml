@@ -80,6 +80,12 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.8.5"
+      - name: Install IaC security scanner
+        run: |
+          # tfsec (or checkov) powers the canonical iac_validator security
+          # operation; install one so the gate executes instead of reporting
+          # unavailable. Prefer checkov (pip package, no separate download).
+          python -m pip install checkov
       - name: Generate Terraform baseline via the RUP runtime
         run: |
           python - <<'PYEOF'
@@ -106,15 +112,61 @@ jobs:
                              cwd=target / "terraform", check=True)
               subprocess.run(["terraform", "validate", "-no-color"],
                              cwd=target / "terraform", check=True)
-              print("terraform init + validate OK")
+              # The iac_scan gate must also pass end-to-end: it re-runs init +
+              # validate and adds the checkov security operation.
+              subprocess.run(["checkov", "-d", str(target / "terraform"),
+                              "--framework", "terraform", "--quiet"], check=True)
+              print("terraform init + validate + checkov OK")
+          PYEOF
+
+  pulumi-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-ci.txt
+      - name: Set up Pulumi
+        uses: pulumi/actions@v6
+        with:
+          pulumi-version: "3.150.0"
+      - name: Run lifecycle on the Pulumi fixture (iac_scan pulumi preview path)
+        run: |
+          python - <<'PYEOF'
+          import subprocess, sys, tempfile, json
+          from pathlib import Path
+          sys.path.insert(0, ".")
+          from tests.forward.fixtures import build_fixture
+
+          with tempfile.TemporaryDirectory() as td:
+              target = Path(td) / "pulumi_repo"
+              build_fixture("pulumi_project", target)
+              subprocess.run(
+                  [sys.executable, "-m", "runtime.cli", "all", "--target", str(target),
+                   "--sandbox", "off", "--override-escalation",
+                   "--time-budget", "180", "--max-files", "30"],
+                  check=False, capture_output=True,
+              )
+              data = json.loads((target / ".rup" / "RUP_VERIFICATION.json").read_text())
+              iac = data["audit_trail"][0]["details"]["gates"]["iac_scan"]
+              if iac.get("executed") is not True or iac.get("passed") is not True:
+                  raise SystemExit(f"iac_scan gate failed with pulumi on PATH: {iac}")
+              print("iac_scan pulumi_preview gate OK")
           PYEOF
 
   required:
     if: always()
-    needs: [test, integrity, terraform-validation]
+    needs: [test, integrity, terraform-validation, pulumi-validation]
     runs-on: ubuntu-latest
     steps:
       - run: |
           test "${{ needs.test.result }}" = "success"
           test "${{ needs.integrity.result }}" = "success"
           test "${{ needs.terraform-validation.result }}" = "success"
+          test "${{ needs.pulumi-validation.result }}" = "success"
