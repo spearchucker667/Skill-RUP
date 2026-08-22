@@ -1932,3 +1932,48 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
 ### Next Actions
 - Watch the `pulumi-validation` and `terraform-validation` CI jobs on the next
   push; adjust if the pinned action versions drift.
+
+## 2026-08-22 - Session: Fix pulumi-validation CI environment contract and version centralization
+
+### Accomplishments
+- **Root-cause fix for `pulumi-validation`**: the CI job now installs the fixture's
+  Python requirements (`pulumi>=3.0`), provisions a disposable local file backend
+  (`pulumi login file://.../.pulumi-state`), initializes a deterministic `ci`
+  stack, and passes `PULUMI_CONFIG_PASSPHRASE=""` into the RUP lifecycle. The
+  assertion now inspects `operations["pulumi_preview"]` directly (`executed`,
+  `command_succeeded`, `passed`) instead of the aggregate `iac_scan.passed`, so a
+  masked failure in another IaC operation cannot pass the dedicated gate.
+- **Runtime env allowlist**: added `PULUMI_CONFIG_` to `_ENV_PREFIX_ALLOWLIST` in
+  `runtime/security.py` so `PULUMI_CONFIG_PASSPHRASE` survives the RUP-SEC-002
+  scrub and reaches `pulumi preview`, while cloud credentials such as
+  `PULUMI_ACCESS_TOKEN` remain blocked.
+- **Discovery/execution truth**: corrected the misleading `build_pulumi_project`
+  fixture docstring; `Pulumi.yaml`/`Pulumi.yml` is already detected as existing
+  IaC, so IAC-001 is never emitted and Terraform is never scaffolded. Added
+  `test_iac_respects_existing_pulumi_project` to lock this behavior.
+- **Version centralization**: introduced a repository-root `VERSION` file (`3.0.2`)
+  and updated `runtime/__init__.py` and `scripts/package_skill.py` to read it.
+  `.github/workflows/validate-skill.yml` no longer hardcodes `3.0.0`.
+- **Supply-chain hardening**: pinned `pulumi/actions` and
+  `hashicorp/setup-terraform` to reviewed commit SHAs and pinned `checkov` to
+  `3.3.13` in the `terraform-validation` job.
+
+### Validation Results
+- `python -m pytest tests/` — 223 passed (new Pulumi regression test + env-scrub test green).
+- `python scripts/generate_schemas_templates.py --check` PASS.
+- `python scripts/generate_workflows.py --check` PASS.
+- `python scripts/build_capability_map.py --check` PASS.
+- `python scripts/audit_sources.py --check` PASS.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` — 40 valid.
+- `bandit -r runtime scripts -c bandit.yaml` — 0 issues.
+- `python -m compileall runtime scripts` — clean.
+
+### Open Blockers
+- None. The `pulumi-validation` job cannot be exercised on this macOS host
+  because Pulumi is not installed locally; the fix is validated by code review
+  and the existing pytest suite.
+
+### Next Actions
+- Push the branch and confirm the `pulumi-validation`, `terraform-validation`,
+  `required`, and `validate-skill` CI jobs pass on the runner.
+- If Pulumi v6 action SHA ages out, evaluate v7 separately from functional fixes.

@@ -64,11 +64,16 @@ jobs:
           print("All SKILL.md progressive-disclosure references exist.")
           PY
       - name: Package skill
-        run: python scripts/package_skill.py --version 3.0.0 --output dist/rup-skill-v3.0.0.zip
+        run: |
+          VERSION=$(cat VERSION)
+          python scripts/package_skill.py --version "$VERSION" --output "dist/rup-skill-v${VERSION}.zip"
       - name: Verify package
-        run: python scripts/package_skill.py --verify --output dist/rup-skill-v3.0.0.zip
+        run: |
+          VERSION=$(cat VERSION)
+          python scripts/package_skill.py --verify --output "dist/rup-skill-v${VERSION}.zip"
       - name: Validate packaged skill
         run: |
+          VERSION=$(cat VERSION)
           mkdir -p /tmp/skill-extract
-          unzip -q dist/rup-skill-v3.0.0.zip -d /tmp/skill-extract
+          unzip -q "dist/rup-skill-v${VERSION}.zip" -d /tmp/skill-extract
           skills-ref validate /tmp/skill-extract/rup

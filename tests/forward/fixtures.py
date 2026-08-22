@@ -170,9 +170,9 @@ def build_ops_workstreams(target_dir: Path) -> None:
 def build_pulumi_project(target_dir: Path) -> None:
     """Python Pulumi project (canonical iac_validator pulumi path).
 
-    Discovery flags IAC-001 (Pulumi alone is not detected as IaC by the
-    gap check) and execution scaffolds the Terraform baseline; verification
-    exercises ``pulumi preview`` on the Pulumi project when pulumi is on PATH.
+    Discovery treats ``Pulumi.yaml`` as existing IaC, so IAC-001 is not emitted
+    and execution never scaffolds Terraform; verification exercises
+    ``pulumi preview`` on the Pulumi project when pulumi is on PATH.
     """
     _write(
         target_dir / "Pulumi.yaml",

@@ -979,6 +979,44 @@ def test_iac_respects_existing_infrastructure(tmp_path):
     assert dispositions.get("IAC-002") == "PARTIAL"
 
 
+def test_iac_respects_existing_pulumi_project(tmp_path):
+    """Canonical iac_validator: existing Pulumi project is never overwritten."""
+    repo = tmp_path / "pulumi_repo"
+    repo.mkdir()
+    _init_git(repo)
+    (repo / "Pulumi.yaml").write_text("name: demo\nruntime: python\n")
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "Pulumi.yaml"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "IAC-002",
+                "category": "iac",
+                "title": "Missing Infrastructure as Code",
+                "acceptance_criteria": [],
+                "risk": "low",
+            }
+        ],
+        selected_items=["IAC-002"],
+    )
+    data = phase.execute()
+
+    assert data["changes"] == []
+    assert not (repo / "terraform").exists()
+    dispositions = {r["backlog_item_id"]: r["disposition"] for r in data["recommendations"]}
+    assert dispositions.get("IAC-002") == "PARTIAL"
+
+
 def test_recommendations_are_not_file_changes(tmp_path):
     """Recommendations must never appear in the changes list."""
     repo = tmp_path / "rec_repo"

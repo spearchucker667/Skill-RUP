@@ -29,6 +29,14 @@ SKILL_DIR_NAME = "rup"
 DEFAULT_DIST_DIR = "dist"
 
 
+def _default_version() -> str:
+    """Read the canonical skill version from the repository VERSION file."""
+    version_file = Path(__file__).parent.parent / "VERSION"
+    if version_file.exists():
+        return version_file.read_text(encoding="utf-8").strip()
+    return "3.0.0"
+
+
 def _error(message: str) -> None:
     print(f"Error: {message}", file=sys.stderr)
 
@@ -300,8 +308,8 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Deterministic RUP skill packager")
     parser.add_argument(
         "--version",
-        default=os.getenv("RUP_SKILL_VERSION", "3.0.0"),
-        help="Semantic version for the package (default: 3.0.0 or RUP_SKILL_VERSION)",
+        default=os.getenv("RUP_SKILL_VERSION", _default_version()),
+        help="Semantic version for the package (default: VERSION file or RUP_SKILL_VERSION)",
     )
     parser.add_argument(
         "--output",

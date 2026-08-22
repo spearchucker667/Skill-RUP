@@ -61,9 +61,11 @@ _ENV_ALLOWLIST = {
     "PROCESSOR_REVISION",
 }
 
-# Prefix allowlists for benign package-manager configuration. These never carry
-# credentials and are required for npm/pnpm/yarn to function in CI environments.
-_ENV_PREFIX_ALLOWLIST = ("NPM_CONFIG_", "YARN_", "PNPM_", "COREPACK_")
+# Prefix allowlists for benign configuration. These never carry credentials and
+# are required for npm/pnpm/yarn to function in CI environments and for Pulumi
+# local-file-backend passphrase handling (PULUMI_CONFIG_PASSPHRASE) without
+# exposing cloud access tokens (PULUMI_ACCESS_TOKEN).
+_ENV_PREFIX_ALLOWLIST = ("NPM_CONFIG_", "YARN_", "PNPM_", "COREPACK_", "PULUMI_CONFIG_")
 
 
 class LimitedAliasLoader(yaml.SafeLoader):
