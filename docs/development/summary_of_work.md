@@ -1797,3 +1797,45 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
 - Create the GitHub release from tag `v3.0.1` to trigger
   `release-package.yml`, which re-validates, re-packages, and uploads the
   archive + checksum, and runs `skills-ref validate`.
+
+## 2026-08-22 - Session: IAC-001 gap, iac_validator gate, terraform CI, GitHub release v3.0.1
+
+### Accomplishments
+- Discovery now emits `IAC-001` (missing Infrastructure-as-Code) classified
+  under the canonical `performance` gap dimension (the Gap category enum has no
+  iac slot); execution routes `IAC-*` gap ids to the ported `_handle_iac`. The
+  `ops_workstreams` forward fixture now requires IAC-001 in the plan and
+  terraform/main.tf, variables.tf, outputs.tf in the execution changes (plan
+  budget raised to 180m / 30 files so the 25-minute IaC effort fits).
+- Verification gains an `iac_scan` gate implementing the canonical
+  `iac_validator` contract: `not_applicable` without *.tf/Pulumi, `unavailable`
+  when terraform is missing (explicit follow-up, never a fabricated pass),
+  executed `terraform validate` otherwise; wired into `_determine_status` and
+  the audit-trail gates dict. Four new unit tests cover the matrix.
+- The generated Terraform baseline now uses the `hashicorp/null` provider
+  (resource, service_name variable, resource_id output) so `terraform init`
+  and `terraform validate` run offline with no credentials and no remote state.
+- New `terraform-validation` CI job: sets up Terraform 1.8.5, runs the full
+  RUP lifecycle on the ops_workstreams fixture to generate the baseline, then
+  runs `terraform init -backend=false` + `terraform validate` — proving the
+  scaffold is syntactically valid on every push. `required` job now gates on it.
+- Created the GitHub release `v3.0.1` from the tag via `gh`; the
+  `release-package.yml` workflow ran green (validate source, package, verify
+  hashes, `skills-ref validate`, upload assets) and attached
+  `rup-skill-v3.0.1.zip` + `.sha256` to the release.
+
+### Validation Results
+- `pytest tests/` 217 passed; forward fixtures 13/13.
+- `build_capability_map --check` PASS; `audit_sources --check` PASS;
+  `validate_rup` 40 valid; schemas/workflows `--check` PASS; `bandit` 0 issues;
+  `compileall` clean.
+- GitHub release workflow: all steps green; assets uploaded.
+
+### Open Blockers
+- None. The v3.0.1 tag predates the IAC-001/iac gate/CI job commit (d2082f8);
+  those land in the next release. `terraform` itself is not installed in this
+  environment, so the terraform init/validate proof runs in CI.
+
+### Next Actions
+- Cut a follow-up release (e.g. v3.0.2) to include the iac_validator gate and
+  terraform CI job if a consistent tag is desired.
