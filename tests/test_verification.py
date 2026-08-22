@@ -626,3 +626,74 @@ def test_secret_scan_full_coverage_is_complete(tmp_path, make_phase):
     assert result["complete"] is True
     assert result["files_scanned"] >= 1
     assert phase._gate_passed("secret_scan", result) is True
+
+
+def test_iac_scan_not_applicable_without_config(make_phase, tmp_path):
+    """Canonical iac_validator: no *.tf / Pulumi -> not_applicable, never a pass."""
+    (tmp_path / "main.py").write_text("print('hi')\n")
+
+    phase, _, _ = make_phase()
+    result = phase._run_iac_validate()
+
+    assert result["executed"] is False
+    assert result["status"] == "not_applicable"
+    assert result["passed"] is False
+    assert phase._gate_passed("iac_scan", result) is False
+
+
+def test_iac_scan_reports_unavailable_when_terraform_missing(make_phase, tmp_path, monkeypatch):
+    """Canonical iac_validator: terraform config present but binary absent -> unavailable."""
+    (tmp_path / "main.tf").write_text('resource "null_resource" "x" {}\n')
+
+    phase, _, _ = make_phase()
+    monkeypatch.setattr(phase, "_tool_available", lambda _e: False)
+
+    result = phase._run_iac_validate()
+
+    assert result["executed"] is False
+    assert result["status"] == "unavailable"
+    assert result["tool"] == "terraform"
+    assert "iac_validator" in result["reason"]
+
+
+def test_iac_scan_executes_terraform_validate(make_phase, tmp_path, monkeypatch):
+    """Canonical iac_validator: terraform validate runs and passes on clean config."""
+    (tmp_path / "main.tf").write_text('resource "null_resource" "x" {}\n')
+
+    phase, _, _ = make_phase()
+    monkeypatch.setattr(phase, "_tool_available", lambda e: e == "terraform")
+    calls = []
+
+    def _fake_run_tool(cmd, timeout=300):
+        calls.append(cmd)
+        assert cmd == ["terraform", "validate"]
+        return 0, "Success! The configuration is valid.", ""
+
+    monkeypatch.setattr(phase, "_run_tool", _fake_run_tool)
+
+    result = phase._run_iac_validate()
+
+    assert result["executed"] is True
+    assert result["passed"] is True
+    assert result["tool"] == "terraform"
+    assert phase._gate_passed("iac_scan", result) is True
+    assert calls == [["terraform", "validate"]]
+
+
+def test_iac_scan_fails_on_invalid_config(make_phase, tmp_path, monkeypatch):
+    """Canonical iac_validator: terraform validate rc != 0 fails the gate."""
+    (tmp_path / "main.tf").write_text("not valid terraform {\n")
+
+    phase, _, _ = make_phase()
+    monkeypatch.setattr(phase, "_tool_available", lambda e: e == "terraform")
+    monkeypatch.setattr(
+        phase,
+        "_run_tool",
+        lambda cmd, timeout=300: (1, "", "Error: Unsupported argument"),
+    )
+
+    result = phase._run_iac_validate()
+
+    assert result["executed"] is True
+    assert result["passed"] is False
+    assert phase._gate_passed("iac_scan", result) is False

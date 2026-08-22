@@ -945,6 +945,60 @@ class VerificationPhase:
         )
 
     # ------------------------------------------------------------------
+    # IaC validation (canonical iac_validator tool contract)
+    # ------------------------------------------------------------------
+    def _run_iac_validate(self) -> Dict[str, Any]:
+        """Validate Infrastructure-as-Code with terraform when present.
+
+        Implements the canonical ``iac_validator`` contract (validate/lint/
+        security/cost; terraform, pulumi, cloudformation, ansible, helm). The
+        deterministic runtime covers ``terraform validate`` when a Terraform
+        configuration exists and the binary is installed; missing configs are
+        ``not_applicable`` and missing tooling is reported ``unavailable`` with
+        an explicit follow-up (never fabricated as a pass).
+        """
+        has_tf = bool(
+            list(self.target_dir.glob("*.tf"))
+            or list(self.target_dir.glob("terraform/**/*.tf"))
+        )
+        has_pulumi = (self.target_dir / "Pulumi.yaml").exists() or (
+            self.target_dir / "Pulumi.yml").exists()
+        if not (has_tf or has_pulumi):
+            return self._gate_not_run(
+                "not_applicable",
+                "No Infrastructure-as-Code configuration detected (no *.tf or Pulumi project)",
+            )
+
+        if has_tf:
+            if not self._tool_available("terraform"):
+                return self._gate_not_run(
+                    "unavailable",
+                    "terraform not installed; run the canonical iac_validator gate "
+                    "(terraform validate/plan) manually or in CI",
+                    tool="terraform",
+                )
+            rc, stdout, stderr = self._run_tool(["terraform", "validate"], timeout=300)
+            combined = (stdout + "\n" + stderr).strip()
+            issues = combined.splitlines() if rc != 0 else []
+            return {
+                "executed": True,
+                "command_succeeded": rc == 0,
+                "passed": rc == 0,
+                "tool": "terraform",
+                "issues": issues[:20],
+                "details": combined[:2000],
+            }
+
+        # Pulumi project present but no terraform config: report unavailable for
+        # the deterministic gate rather than inventing a Pulumi invocation.
+        return self._gate_not_run(
+            "unavailable",
+            "Pulumi project detected; the deterministic iac_validator gate covers "
+            "terraform only, so run `pulumi preview` manually or in CI",
+            tool="pulumi",
+        )
+
+    # ------------------------------------------------------------------
     # Status determination
     # ------------------------------------------------------------------
     def _gate_passed(self, name: str, result: Dict[str, Any]) -> bool:
@@ -986,6 +1040,7 @@ class VerificationPhase:
         prompt_injection_scan: Dict[str, Any],
         dependency_scan: Dict[str, Any],
         sast_scan: Dict[str, Any],
+        iac_scan: Dict[str, Any],
     ) -> Tuple[str, str, List[Dict[str, Any]]]:
         gates = {
             "tests": tests,
@@ -996,6 +1051,7 @@ class VerificationPhase:
             "prompt_injection_scan": prompt_injection_scan,
             "dependency_scan": dependency_scan,
             "sast_scan": sast_scan,
+            "iac_scan": iac_scan,
         }
 
         failed_gates = []
@@ -1094,6 +1150,7 @@ class VerificationPhase:
             type_check_result = self._run_type_check()
             dep_result = self._run_dependency_scan()
             sast_result = self._run_sast_scan()
+            iac_result = self._run_iac_validate()
         else:
             reason = exec_reason or "Blocked by the execution trust gate"
             tests_result = self._schema_test_not_run("blocked", reason)
@@ -1102,6 +1159,7 @@ class VerificationPhase:
             type_check_result = self._schema_type_check_not_run("blocked", reason)
             dep_result = self._gate_not_run("blocked", reason)
             sast_result = self._gate_not_run("blocked", reason)
+            iac_result = self._gate_not_run("blocked", reason)
         secret_result = self._run_secret_scan()
 
         overall_status, audit_msg, _ = self._determine_status(
@@ -1113,6 +1171,7 @@ class VerificationPhase:
             prompt_injection_result,
             dep_result,
             sast_result,
+            iac_result,
         )
 
         # Build schema-compliant output copies while preserving metadata for audit.
@@ -1212,6 +1271,14 @@ class VerificationPhase:
                             "status": sast_result.get("status"),
                             "reason": sast_result.get("reason"),
                             "tool": sast_result.get("tool"),
+                        },
+                        "iac_scan": {
+                            "executed": iac_result.get("executed"),
+                            "passed": iac_result.get("passed"),
+                            "command_succeeded": iac_result.get("command_succeeded"),
+                            "status": iac_result.get("status"),
+                            "reason": iac_result.get("reason"),
+                            "tool": iac_result.get("tool"),
                         },
                     },
                 },

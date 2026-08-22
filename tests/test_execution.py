@@ -931,10 +931,10 @@ def test_iac_generates_terraform_baseline(tmp_path):
     assert all(c["backlog_item_id"] == "IAC-001" for c in data["changes"])
 
     main = (repo / "terraform" / "main.tf").read_text()
-    assert 'provider "aws"' in main
-    assert 'resource "aws_instance" "app"' in main
+    assert 'resource "null_resource" "app"' in main
+    assert 'source  = "hashicorp/null"' in main
     assert "variable \"service_name\"" in (repo / "terraform" / "variables.tf").read_text()
-    assert "output \"instance_id\"" in (repo / "terraform" / "outputs.tf").read_text()
+    assert "output \"resource_id\"" in (repo / "terraform" / "outputs.tf").read_text()
 
     dispositions = {r["backlog_item_id"]: r["disposition"] for r in data["recommendations"]}
     assert dispositions.get("IAC-001") == "PARTIAL"

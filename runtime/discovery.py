@@ -218,7 +218,28 @@ class DiscoveryPhase:
                 "files_affected": ["Dockerfile", ".dockerignore"]
             })
 
-        # --- 1.8 Observability Gaps (ws_observability) ---
+        # --- 1.8 IaC Gaps (canonical iac_validator contract) ---
+        iac_tooling = tooling.get("iac") or ""
+        has_iac = bool(iac_tooling) or bool(
+            list(self.target_dir.glob("*.tf"))
+            or list(self.target_dir.glob("terraform/**/*.tf"))
+            or list(self.target_dir.glob("Pulumi.yaml"))
+            or list(self.target_dir.glob("Pulumi.yml"))
+        )
+        if not has_iac:
+            gaps.append({
+                "id": "IAC-001",
+                "category": "performance",
+                "severity": "low",
+                "title": "Missing Infrastructure as Code",
+                "description": "No Terraform, Pulumi, or other IaC configuration detected.",
+                "impact": "Infrastructure cannot be provisioned reproducibly or reviewed as code.",
+                "suggested_fix": "Add a Terraform baseline (provider, resources, variables, outputs) or an equivalent IaC tool.",
+                "effort_estimate": "medium",
+                "files_affected": ["terraform/main.tf"]
+            })
+
+        # --- 1.9 Observability Gaps (ws_observability) ---
         has_observability = (self.target_dir / "docs" / "observability.md").exists()
         if not has_observability:
             gaps.append({

@@ -378,6 +378,8 @@ class ExecutionPhase:
         # the fallback for legacy or explicitly-categorized plans.
         if item_id.startswith("CONT"):
             return "container"
+        if item_id.startswith("IAC"):
+            return "iac"
         if item_id.startswith("OBS"):
             return "observability"
         if category in ("containerization", "containers", "container"):
@@ -1206,65 +1208,38 @@ public issue for security-sensitive findings.
         '# main.tf — canonical RUP IaC baseline\n'
         '# Generated deterministically by the runtime; extend with real\n'
         '# resources, remote state, and environment-specific values.\n'
+        '# Uses the null provider so the scaffold initializes and validates\n'
+        '# offline (terraform init && terraform validate) with no credentials.\n'
         '\n'
         'terraform {\n'
         '  required_providers {\n'
-        '    aws = {\n'
-        '      source  = "hashicorp/aws"\n'
-        '      version = "~> 5.0"\n'
+        '    null = {\n'
+        '      source  = "hashicorp/null"\n'
+        '      version = "~> 3.2"\n'
         '    }\n'
         '  }\n'
         '}\n'
         '\n'
-        'provider "aws" {\n'
-        '  region = var.region\n'
-        '}\n'
-        '\n'
         '# Replace with the actual infrastructure for this service.\n'
-        'resource "aws_instance" "app" {\n'
-        '  ami           = var.ami_id\n'
-        '  instance_type = var.instance_type\n'
-        '\n'
-        '  tags = {\n'
-        '    Name        = var.service_name\n'
-        '    ManagedBy   = "terraform"\n'
+        'resource "null_resource" "app" {\n'
+        '  triggers = {\n'
+        '    service = var.service_name\n'
         '  }\n'
         '}\n'
     )
 
     _TERRAFORM_VARIABLES_TEMPLATE = (
-        'variable "region" {\n'
-        '  description = "AWS region"\n'
-        '  type        = string\n'
-        '  default     = "us-east-1"\n'
-        '}\n'
-        '\n'
         'variable "service_name" {\n'
-        '  description = "Service name for resource tagging"\n'
+        '  description = "Service name applied to provisioned resources"\n'
         '  type        = string\n'
-        '}\n'
-        '\n'
-        'variable "ami_id" {\n'
-        '  description = "AMI identifier for the application instance"\n'
-        '  type        = string\n'
-        '}\n'
-        '\n'
-        'variable "instance_type" {\n'
-        '  description = "EC2 instance type"\n'
-        '  type        = string\n'
-        '  default     = "t3.micro"\n'
+        '  default     = "app"\n'
         '}\n'
     )
 
     _TERRAFORM_OUTPUTS_TEMPLATE = (
-        'output "instance_id" {\n'
-        '  description = "ID of the application instance"\n'
-        '  value       = aws_instance.app.id\n'
-        '}\n'
-        '\n'
-        'output "public_ip" {\n'
-        '  description = "Public IP of the application instance"\n'
-        '  value       = aws_instance.app.public_ip\n'
+        'output "resource_id" {\n'
+        '  description = "ID of the scaffolded resource"\n'
+        '  value       = null_resource.app.id\n'
         '}\n'
     )
 

@@ -140,11 +140,12 @@ def build_adversarial_content(target_dir: Path) -> None:
 
 
 def build_ops_workstreams(target_dir: Path) -> None:
-    """Python app without containerization or observability (ws_containers / ws_observability).
+    """Python app without containerization, IaC, or observability.
 
-    Discovery must flag CONT-001 (no Dockerfile) and OBS-001 (no observability
-    baseline); execution must scaffold the Dockerfile/.dockerignore/
-    docker-compose.yml and docs/observability.md through the real CLI lifecycle.
+    Discovery must flag CONT-001 (no Dockerfile), IAC-001 (no Terraform/Pulumi),
+    and OBS-001 (no observability baseline); execution must scaffold the
+    Dockerfile/.dockerignore/docker-compose.yml, terraform/, and
+    docs/observability.md through the real CLI lifecycle.
     """
     _write(
         target_dir / "src" / "app.py",

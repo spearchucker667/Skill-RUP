@@ -206,13 +206,21 @@ def check_fixture_specific(target_dir: Path, fixture_name: str) -> List[str]:
         # canonical container scaffolding plus the observability baseline doc.
         plan_data = json.loads((state_dir / "RUP_PLAN.json").read_text(encoding="utf-8"))
         selected = set(plan_data.get("selected_items", []))
-        for gap_id in ("CONT-001", "OBS-001"):
+        for gap_id in ("CONT-001", "IAC-001", "OBS-001"):
             if gap_id not in selected:
                 errors.append(f"ops_workstreams fixture: {gap_id} not selected by planning")
 
         exec_data = json.loads((state_dir / "RUP_EXECUTION.json").read_text(encoding="utf-8"))
         changes = {c.get("file_path") for c in exec_data.get("changes", [])}
-        for path in ("Dockerfile", ".dockerignore", "docker-compose.yml", "docs/observability.md"):
+        for path in (
+            "Dockerfile",
+            ".dockerignore",
+            "docker-compose.yml",
+            "terraform/main.tf",
+            "terraform/variables.tf",
+            "terraform/outputs.tf",
+            "docs/observability.md",
+        ):
             if path not in changes:
                 errors.append(f"ops_workstreams fixture: {path} missing from execution changes")
 
@@ -233,6 +241,15 @@ def check_fixture_specific(target_dir: Path, fixture_name: str) -> List[str]:
                     errors.append(f"ops_workstreams fixture: observability doc missing marker {marker!r}")
         else:
             errors.append("ops_workstreams fixture: docs/observability.md was not generated")
+
+        main_tf = target_dir / "terraform" / "main.tf"
+        if main_tf.exists():
+            text = main_tf.read_text(encoding="utf-8")
+            for marker in ('source  = "hashicorp/null"', 'resource "null_resource" "app"'):
+                if marker not in text:
+                    errors.append(f"ops_workstreams fixture: main.tf missing marker {marker!r}")
+        else:
+            errors.append("ops_workstreams fixture: terraform/main.tf was not generated")
 
     return errors
 
@@ -261,11 +278,12 @@ def run_fixture(fixture_name: str, fixtures_base: Path) -> Tuple[bool, List[str]
             # explicitly overrides that guard to exercise the full lifecycle.
             "--override-escalation",
         ]
-        # The ops_workstreams fixture targets the P2/P3 containerization and
-        # observability workstreams, which only fit the plan when the run budget
-        # admits them alongside the P1 backlog.
+        # The ops_workstreams fixture targets the P2/P3 containerization, IaC,
+        # and observability workstreams, which only fit the plan when the run
+        # budget admits them alongside the P1 backlog (the P2/P3 items total
+        # ~125 minutes including the 25-minute IaC effort).
         if fixture_name == "ops_workstreams":
-            cmd.extend(["--time-budget", "120"])
+            cmd.extend(["--time-budget", "180", "--max-files", "30"])
         result = _run(cmd, REPO_ROOT)
 
         if fixture_name in ADVERSARIAL_CONTENT_FIXTURES:
