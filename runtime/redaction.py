@@ -6,8 +6,13 @@ from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
 SECRET_PATTERNS: List[Tuple[str, str, re.Pattern]] = [
-    ("AWS Access Key", "high", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("AWS Access Key", "high", re.compile(r"\b(AKIA|ASIA)[0-9A-Z]{16}\b")),
     ("GitHub Personal Access Token", "critical", re.compile(r"\b(ghp_[0-9a-zA-Z]{36}|github_pat_[0-9a-zA-Z_]{82})\b")),
+    ("GitLab Personal Access Token", "critical", re.compile(r"\bglpat-[0-9A-Za-z_\-]{20}\b")),
+    ("npm Access Token", "high", re.compile(r"\bnpm_[0-9a-zA-Z]{36}\b")),
+    ("PyPI Upload Token", "high", re.compile(r"\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_\-]{50,}\b")),
+    ("Stripe Live Secret Key", "critical", re.compile(r"\b(sk|rk)_live_[0-9a-zA-Z]{24,}\b")),
+    ("Google API Key", "high", re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b")),
     ("Private Key", "critical", re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----")),
     ("Generic Secret Assignment", "medium", re.compile(r"(?i)(api[_-]?key|secret|password|access[_-]?token|auth[_-]?token)\s*[:=]\s*['\"]([a-zA-Z0-9_\-\.]{16,})['\"]")),
     ("JSON Web Token", "medium", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
@@ -39,18 +44,40 @@ def redact_secrets(content: str, mask: str = "[REDACTED]") -> str:
         redacted = pattern.sub(mask, redacted)
     return redacted
 
-def scan_file_for_secrets(file_path: Path, max_bytes: int = 1024 * 1024) -> List[Dict[str, Any]]:
-    """Scan a local file for secret patterns safely."""
+def scan_file_for_secrets_status(
+    file_path: Path, max_bytes: int = 1024 * 1024
+) -> Tuple[List[Dict[str, Any]], str]:
+    """Scan one file and report a per-file status alongside findings.
+
+    Status is one of:
+      - "scanned"  : content read and scanned
+      - "too_large": skipped because the file exceeds ``max_bytes``
+      - "error"    : could not be read/scanned
+      - "missing"  : path does not exist or is not a regular file
+
+    The caller must never treat an empty finding list as ``clean`` when the
+    status is not "scanned" (audit P1-20: fail closed, not silent).
+    """
     if not file_path.exists() or not file_path.is_file():
-        return []
+        return [], "missing"
     try:
         if file_path.stat().st_size > max_bytes:
-            return []
+            return [], "too_large"
         content = file_path.read_text(encoding="utf-8", errors="ignore")
         findings = scan_secrets(content)
         for f in findings:
             f["file"] = str(file_path)
-        return findings
+        return findings, "scanned"
     except Exception:
-        return []
+        return [], "error"
+
+
+def scan_file_for_secrets(file_path: Path, max_bytes: int = 1024 * 1024) -> List[Dict[str, Any]]:
+    """Scan a local file for secret patterns safely (backwards-compatible).
+
+    Returns findings only; for structured coverage status use
+    :func:`scan_file_for_secrets_status`.
+    """
+    findings, _ = scan_file_for_secrets_status(file_path, max_bytes=max_bytes)
+    return findings
 

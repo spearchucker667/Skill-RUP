@@ -65,6 +65,7 @@ unless explicitly requested otherwise in read-only mode.
 12. Preserve auditability and deterministic artifact IDs.
 13. Always produce a run manifest and final state.
 14. If a tool is unavailable, degrade to explicit manual verification rather than fabricate success.
+15. Never implicitly acquire tools over the network (offline resolution only; report unavailable rather than fetch).
 
 ## Progressive Reference Loading
 

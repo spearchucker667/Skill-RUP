@@ -39,8 +39,19 @@ def test_capabilities_generated_from_protocol():
     assert "rup.phase_4_verification.4.5" in ids  # was missing from hand-curated registry
     assert "rup.phase_4_verification.4.6" in ids
 
-    # Execution dispatcher and cross-cutting capabilities
-    assert "rup.phase_3_execution.workstreams" in ids
+    # Execution workstreams are decomposed into individual capabilities
+    # (audit P1-1); there is no shared dispatcher capability anymore.
+    assert "rup.phase_3_execution.workstreams" not in ids
+    assert "rup.phase_3_execution.workstreams.bug_fixes" in ids
+    assert "rup.phase_3_execution.workstreams.tests" in ids
+    assert "rup.phase_3_execution.workstreams.ci_cd" in ids
+    assert "rup.phase_3_execution.workstreams.security" in ids
+    assert "rup.phase_3_execution.workstreams.documentation" in ids
+    assert "rup.phase_3_execution.workstreams.governance" in ids
+    assert "rup.phase_3_execution.workstreams.containerization" in ids
+    assert "rup.phase_3_execution.workstreams.observability" in ids
+
+    # Cross-cutting capabilities
     assert "rup.guardrails.security" in ids
     assert "rup.state.lifecycle" in ids
 
@@ -115,8 +126,43 @@ def test_verify_capabilities_counts_are_consistent():
     """Aggregated counts in verify_capabilities match the capability list."""
     result = verify_capabilities(REPO_ROOT)
     assert result["total"] == len(result["capabilities"])
-    assert result["ported"] + result["unmapped"] == result["total"]
-    assert all(c["port_status"] in ("ported", "unmapped") for c in result["capabilities"])
+    assert result["unmapped"] == result["by_class"].get("unmapped", 0)
+    assert sum(result["by_class"].values()) == result["total"]
+    assert sum(result["by_verification_level"].values()) == result["total"]
+    assert all(
+        c["port_status"] in ("deterministic", "partial", "agent_native", "not_ported", "parity_verified", "unmapped")
+        for c in result["capabilities"]
+    )
+
+
+def test_not_ported_capabilities_are_never_reported_ported():
+    """A NOT_PORTED workstream stays NOT_PORTED even when symbols exist and semantic tests pass."""
+    result = verify_capabilities(REPO_ROOT)
+    by_id = {c["id"]: c for c in result["capabilities"]}
+
+    for ws_id in (
+        "rup.phase_3_execution.workstreams.containerization",
+        "rup.phase_3_execution.workstreams.observability",
+    ):
+        cap = by_id[ws_id]
+        # Implementation and tests are present...
+        assert cap["port_class"] == "not_ported"
+        assert cap["symbols"]
+        # ...but the declared class is authoritative and cannot be upgraded.
+        assert cap["port_status"] == "not_ported"
+
+    # No capability may ever carry the legacy "ported" label.
+    assert all(c["port_status"] != "ported" for c in result["capabilities"])
+
+
+def test_partial_and_agent_native_classes_are_reported_honestly():
+    """Partial/agent-native capabilities keep their declared class, not a ported label."""
+    result = verify_capabilities(REPO_ROOT)
+    by_id = {c["id"]: c for c in result["capabilities"]}
+
+    assert by_id["rup.phase_3_execution.workstreams.tests"]["port_status"] == "partial"
+    assert by_id["rup.phase_3_execution.workstreams.bug_fixes"]["port_status"] == "agent_native"
+    assert by_id["rup.phase_3_execution.workstreams.ci_cd"]["port_status"] == "deterministic"
 
 
 def test_lineage_json_is_schema_valid():

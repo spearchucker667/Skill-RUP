@@ -1,11 +1,11 @@
 # Operational Workflow: Rollback & Reversion
 
 ## Purpose
-Deterministic reversion of executed changes using baseline git checkpoints and cleanup commands.
+Deterministic reversion of executed changes from the structured, platform-neutral rollback operations recorded in execution-state.json (restore_content / remove_file / restore_deleted / move_back).
 
 ## Operational Command
 ```bash
-git checkout -- <modified_files> && rm -f <created_files>
+python3 -m runtime.cli rollback --target <dir>
 ```
 
 ## Canonical Rules & Process
@@ -13,8 +13,9 @@ Follow canonical RUP directives for this workflow.
 
 ## Raw Protocol Data
 ```yaml
-description: Deterministic reversion of executed changes using baseline git checkpoints and cleanup commands.
-cli_command: git checkout -- <modified_files> && rm -f <created_files>
+description: Deterministic reversion of executed changes from the structured, platform-neutral rollback operations recorded
+  in execution-state.json (restore_content / remove_file / restore_deleted / move_back).
+cli_command: python3 -m runtime.cli rollback --target <dir>
 ```
 
 ## Validation

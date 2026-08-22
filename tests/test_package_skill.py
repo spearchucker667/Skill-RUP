@@ -94,6 +94,27 @@ def test_package_manifest_hashes_match():
             assert actual == expected_sha, f"hash mismatch for {arcname}"
 
 
+def test_package_rejects_symlinked_member(tmp_path):
+    """RUP-SEC-001 packaging: a symlinked member must abort packaging."""
+    import os as _os
+
+    root = tmp_path / "skill_root"
+    root.mkdir()
+    (root / "SKILL.md").write_text("name: rup\n", encoding="utf-8")
+    outside = tmp_path / "outside_secret.txt"
+    outside.write_text("secret content", encoding="utf-8")
+    try:
+        _os.symlink(outside, root / "leak.txt")
+    except (OSError, NotImplementedError, PermissionError):
+        pytest.skip("Symlinks not supported on this platform")
+
+    out = tmp_path / "dist" / "out.zip"
+    result = _run(["--version", "1.0.0", "--output", str(out), "--root", str(root)])
+    assert result.returncode == 1
+    assert "symlink" in result.stderr.lower()
+    assert not out.exists()
+
+
 def test_verify_package_fails_on_extra_file():
     out = _unique_dist_path("extra") / "rup-skill-v3.0.0.zip"
     out.parent.mkdir(parents=True, exist_ok=True)

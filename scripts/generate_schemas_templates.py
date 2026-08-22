@@ -140,15 +140,58 @@ SCHEMA_DEFINITIONS = {
             },
             "dispositions": {"type": "object", "additionalProperties": {"type": "string"}},
             "per_item_completion": {"type": "object", "additionalProperties": {"type": "string"}},
+            "per_item_checkpoints": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                        "method": {"type": "string"},
+                        "status": {"type": "string", "enum": ["passed", "failed", "not_applicable", "skipped"]},
+                        "passed": {"type": ["boolean", "null"]},
+                        "tool": {"type": ["string", "null"]},
+                        "details": {"type": "string"}
+                    },
+                    "required": ["method", "status"]
+                }
+            },
+            "package_changes": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                }
+            },
+            "scoped_workspace": {
+                "type": ["object", "null"],
+                "properties": {
+                    "tool": {"type": "string"},
+                    "names": {"type": "array", "items": {"type": "string"}}
+                }
+            },
+            "baseline": {
+                "type": "object",
+                "properties": {
+                    "is_git": {"type": "boolean"},
+                    "head": {"type": ["string", "null"]},
+                    "files": {"type": "object"}
+                }
+            },
+            "backups": {"type": "object", "additionalProperties": {"type": "string"}},
             "rollback_operations": {
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "op": {"type": "string"},
-                        "argv": {"type": "array", "items": {"type": "string"}}
+                        "op": {
+                            "type": "string",
+                            "enum": ["restore_content", "remove_file", "restore_deleted", "move_back", "none"]
+                        },
+                        "path": {"type": ["string", "null"]},
+                        "old_path": {"type": ["string", "null"]},
+                        "backlog_item_id": {"type": ["string", "null"]},
+                        "backup_sha256": {"type": ["string", "null"]}
                     },
-                    "required": ["op", "argv"]
+                    "required": ["op"]
                 }
             }
         },
@@ -164,7 +207,8 @@ SCHEMA_DEFINITIONS = {
                 "category": {"type": "string"},
                 "title": {"type": "string"},
                 "mandatory": {"type": "boolean"},
-                "port_status": {"type": "string", "enum": ["ported", "incomplete", "unmapped"]},
+                "port_class": {"type": "string", "enum": ["deterministic", "partial", "agent_native", "not_ported", "parity_verified"]},
+                "port_status": {"type": "string", "enum": ["deterministic", "partial", "agent_native", "not_ported", "parity_verified", "unmapped"]},
                 "verification_level": {"type": "string", "enum": ["unverified", "present", "structurally_verified", "runtime_smoke_verified", "behaviorally_verified", "canonical_parity_verified"]},
                 "implementation": {"type": "array", "items": {"type": "string"}},
                 "required_symbols": {"type": "array", "items": {"type": "string"}},
@@ -195,7 +239,21 @@ PLAN_STATE_DEF = {
             }
         },
         "selected_for_escalation": {"type": "array", "items": {"type": "string"}},
-        "requires_explicit_override": {"type": "boolean"}
+        "requires_explicit_override": {"type": "boolean"},
+        "closure_admitted": {"type": "array", "items": {"type": "string"}},
+        "checkpoints": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "backlog_item_id": {"type": "string"},
+                    "verification_method": {"type": "string"},
+                    "success_criteria": {"type": "string"},
+                    "rollback": {"type": "string"}
+                },
+                "required": ["backlog_item_id", "verification_method"]
+            }
+        }
     },
     "additionalProperties": False
 }

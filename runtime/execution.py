@@ -10,21 +10,42 @@ Implements canonical Phase 3 Execution per RUP-EXEC-001..007:
 - Rollback procedure generation
 - Exclusion of .rup/ state from repository diffs
 """
+import hashlib
 import json
 import os
 import re
 import shlex
 import sys
+import tempfile
 import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .artifact_builder import ArtifactBuilder
 from .command_runner import run_command
+from .rollback import render_rollback_commands
+from .security import (
+    atomic_jailed_write,
+    execution_gate_status,
+    jailed_mkdir,
+    jailed_unlink,
+    open_jailed_read,
+    read_jailed_text,
+    scan_repository_for_threats,
+)
 from .state import StateManager
 from .tool_detection import ToolDetector
+from .tool_resolution import resolve_js_tool
+from .workspace import changed_packages, dependency_order, detect_workspace
 
 RISK_RANK = {"low": 0, "medium": 1, "high": 2}
+
+
+class BaselineDirtyRefusal(Exception):
+    """Raised when a handler attempts to overwrite a path that was modified in
+    the working tree at baseline capture (RUP-EXEC-005). RUP never mutates
+    pre-existing user changes; the item is surfaced as AGENT_ONLY instead.
+    """
 
 
 class ExecutionPhase:
@@ -33,11 +54,144 @@ class ExecutionPhase:
         target_dir: Path,
         state_manager: StateManager,
         artifact_builder: ArtifactBuilder,
+        allow_exec: bool = False,
+        sandbox: str = "off",
+        override_escalation: bool = False,
+        workspace: Optional[str] = None,
+        changed_only: bool = False,
     ):
         self.target_dir = target_dir
         self.state_manager = state_manager
         self.artifact_builder = artifact_builder
         self.tool_detector = ToolDetector(target_dir)
+        self.allow_exec = allow_exec
+        self.sandbox = sandbox
+        self.override_escalation = override_escalation
+        # Monorepo scoping (audit P1-11): restrict execution to a named package
+        # or to packages containing changes, with per-package tooling.
+        self.workspace = workspace
+        self.changed_only = changed_only
+        # Current handler write root: the repository root for unscoped runs, or
+        # the scoped package directory (per-package remediation writes).
+        self._work_dir = target_dir
+        # Transactional rollback state (RUP-EXEC-004/005): baseline dirty paths
+        # and content-addressed backups of every pre-write file state.
+        self._baseline_dirty_paths: Set[str] = set()
+        self._backups: Dict[str, str] = {}
+        self._baseline_snapshot: Dict[str, Any] = {
+            "is_git": False,
+            "head": None,
+            "files": {},
+        }
+
+    # ------------------------------------------------------------------
+    # Jailed target I/O helpers (RUP-SEC-001 write side)
+    # ------------------------------------------------------------------
+    def _capture_content_baseline(self) -> Dict[str, Any]:
+        """Capture HEAD and per-path content hashes of baseline-dirty paths.
+
+        Runs before any mutation so rollback knows exactly what the working
+        tree looked like at baseline and which paths are user-owned.
+        """
+        snapshot: Dict[str, Any] = {"is_git": False, "head": None, "files": {}}
+        rc, stdout, _ = run_command(["git", "rev-parse", "--is-inside-work-tree"], cwd=self.target_dir)
+        if rc == 0 and stdout.strip() == "true":
+            snapshot["is_git"] = True
+            rc2, head, _ = run_command(["git", "rev-parse", "HEAD"], cwd=self.target_dir)
+            if rc2 == 0:
+                snapshot["head"] = head.strip()
+
+        dirty_paths: Set[str] = set()
+        for entry in self._git_status_entries():
+            for p in (entry["path"], entry.get("old_path")):
+                if not p or p in dirty_paths:
+                    continue
+                dirty_paths.add(p)
+                abs_path = self.target_dir / p
+                try:
+                    with open_jailed_read(self.target_dir, abs_path, "rb") as f:
+                        data = f.read()
+                    snapshot["files"][p] = {
+                        "exists": True,
+                        "sha256": hashlib.sha256(data).hexdigest(),
+                    }
+                except (FileNotFoundError, PermissionError):
+                    snapshot["files"][p] = {"exists": False, "sha256": None}
+
+        self._baseline_dirty_paths = dirty_paths
+        self._baseline_snapshot = snapshot
+        return snapshot
+
+    def _refuse_dirty(self, rel_path: str) -> None:
+        """Refuse to mutate a path that was dirty at baseline capture."""
+        if rel_path in self._baseline_dirty_paths:
+            raise BaselineDirtyRefusal(
+                f"Refusing to overwrite '{rel_path}': the path was modified in the "
+                "working tree at baseline (RUP-EXEC-005). RUP never mutates "
+                "pre-existing user changes; resolve the conflict manually."
+            )
+
+    def _target_relative(self, rel_path: str) -> str:
+        """Map a work-dir-relative path to the target-relative path (for state)."""
+        if self._work_dir == self.target_dir:
+            return rel_path
+        return (self._work_dir.relative_to(self.target_dir) / rel_path).as_posix()
+
+    def _handler_path(self, rel_path: str) -> Path:
+        """Resolve a handler-relative path inside the current work directory.
+
+        Unscoped runs use the repository root; ``--workspace`` runs write and
+        check paths inside the scoped package directory (audit P1-11).
+        """
+        return self._work_dir / rel_path
+
+    def _backup_bytes(self, rel_path: str) -> Optional[str]:
+        """Snapshot pre-write content of ``rel_path`` into the content-addressed
+        backup store under the state directory; returns the SHA-256 or None."""
+        abs_path = self._handler_path(rel_path)
+        try:
+            with open_jailed_read(self.target_dir, abs_path, "rb") as f:
+                data = f.read()
+        except (FileNotFoundError, PermissionError):
+            return None
+        sha = hashlib.sha256(data).hexdigest()
+        backups_dir = self.state_manager.paths.state_dir / "backups"
+        backups_dir.mkdir(parents=True, exist_ok=True)
+        dest = backups_dir / sha
+        if not dest.exists():
+            fd, tmp_path = tempfile.mkstemp(dir=backups_dir, prefix=".rup_b_", suffix=".tmp")
+            try:
+                with os.fdopen(fd, "wb") as f:
+                    f.write(data)
+                os.replace(tmp_path, dest)
+            except Exception:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                raise
+        return sha
+
+    def _write_target(self, rel_path: str, content: str) -> None:
+        """Write a generated file inside the target through the jailed writer.
+
+        Writes inside the current work directory (package-scoped when
+        ``--workspace`` is active), refuses baseline-dirty paths, and snapshots
+        pre-write content so the file can be restored exactly on rollback.
+        """
+        self._refuse_dirty(self._target_relative(rel_path))
+        target = self._handler_path(rel_path)
+        if target.exists() and not target.is_symlink():
+            sha = self._backup_bytes(rel_path)
+            if sha:
+                self._backups[self._target_relative(rel_path)] = sha
+        atomic_jailed_write(self.target_dir, target, content)
+
+    def _mkdir_target(self, rel_path: str) -> None:
+        """Create a directory inside the work dir through the jailed mkdir."""
+        jailed_mkdir(self.target_dir, self._handler_path(rel_path))
+
+    def _read_target_text(self, rel_path: str) -> str:
+        """Read a work-dir file through the jailed reader."""
+        return read_jailed_text(self.target_dir, self._handler_path(rel_path))
 
     # ------------------------------------------------------------------
     # Git status helpers
@@ -235,6 +389,27 @@ class ExecutionPhase:
             return selected_items[0].get("id", "UNASSIGNED")
         return "UNASSIGNED"
 
+    @staticmethod
+    def _group_changes_by_package(
+        changes: List[Dict[str, Any]], ws: Optional[Dict[str, Any]]
+    ) -> Dict[str, List[str]]:
+        """Group change file paths by workspace package (audit P1-11)."""
+        if not ws:
+            return {}
+        packages = ws.get("packages", [])
+        grouped: Dict[str, List[str]] = {}
+        for change in changes:
+            path = change.get("file_path", "")
+            owner = None
+            for p in packages:
+                prefix = p["path"].rstrip("/") + "/"
+                if path == p["path"] or path.startswith(prefix):
+                    owner = p["name"]
+                    break
+            if owner:
+                grouped.setdefault(owner, []).append(path)
+        return grouped
+
     # ------------------------------------------------------------------
     # Recommendation helper
     # ------------------------------------------------------------------
@@ -296,11 +471,11 @@ class ExecutionPhase:
         )
 
         if primary_lang in ("python", "jupyter notebook"):
-            pytest_ini = self.target_dir / "pytest.ini"
+            pytest_ini = self._handler_path("pytest.ini")
             if not pytest_ini.exists():
-                pytest_ini.write_text(
+                self._write_target(
+                    "pytest.ini",
                     "[pytest]\ntestpaths = tests\npython_files = test_*.py\n",
-                    encoding="utf-8",
                 )
                 changes.append(
                     {
@@ -310,8 +485,7 @@ class ExecutionPhase:
                         "backlog_item_id": item_id,
                     }
                 )
-            tests_dir = self.target_dir / "tests"
-            tests_dir.mkdir(exist_ok=True, parents=True)
+            self._mkdir_target("tests")
 
             if concrete:
                 # Concrete criteria are present, but we still refuse to generate
@@ -362,13 +536,12 @@ class ExecutionPhase:
             warnings.warn(f"Could not detect default branch: {e}", RuntimeWarning, stacklevel=2)
         return "main"
 
-    @staticmethod
-    def _pyproject_is_installable(pyproject: Path) -> bool:
+    def _pyproject_is_installable(self, pyproject: Path) -> bool:
         """Return True when pyproject.toml indicates the package is installable."""
         if not pyproject.exists():
             return False
         try:
-            text = pyproject.read_text(encoding="utf-8")
+            text = read_jailed_text(self.target_dir, pyproject)
         except Exception:
             return False
         return any(
@@ -382,9 +555,8 @@ class ExecutionPhase:
         item_id = item.get("id", "")
         changes: List[Dict[str, Any]] = []
         recommendations: List[Dict[str, Any]] = []
-        wf_dir = self.target_dir / ".github" / "workflows"
-        wf_dir.mkdir(exist_ok=True, parents=True)
-        ci_path = wf_dir / "ci.yml"
+        self._mkdir_target(".github/workflows")
+        ci_path = self._handler_path(".github/workflows/ci.yml")
         if ci_path.exists():
             return changes, []
 
@@ -443,7 +615,7 @@ class ExecutionPhase:
         run: go test ./..."""
         else:
             # Python-oriented steps.
-            installable = self._pyproject_is_installable(self.target_dir / "pyproject.toml")
+            installable = self._pyproject_is_installable(self._handler_path("pyproject.toml"))
             install_block = """          python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest"""
@@ -474,7 +646,7 @@ jobs:
       - uses: actions/checkout@v4
 {steps}
 """
-        ci_path.write_text(content, encoding="utf-8")
+        self._write_target(".github/workflows/ci.yml", content)
         changes.append(
             {
                 "file_path": ".github/workflows/ci.yml",
@@ -493,7 +665,7 @@ jobs:
         repo_name = meta.get("name", "Project")
         repo_type = meta.get("repo_type", "Application")
 
-        readme_path = self.target_dir / "README.md"
+        readme_path = self._handler_path("README.md")
         if not readme_path.exists():
             content = f"""# {repo_name}
 
@@ -511,7 +683,7 @@ Run tests locally prior to submitting pull requests.
 ## License
 Refer to the [LICENSE](LICENSE) file for distribution terms.
 """
-            readme_path.write_text(content, encoding="utf-8")
+            self._write_target("README.md", content)
             changes.append(
                 {
                     "file_path": "README.md",
@@ -527,7 +699,7 @@ Refer to the [LICENSE](LICENSE) file for distribution terms.
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         item_id = item.get("id", "")
         changes: List[Dict[str, Any]] = []
-        contrib_path = self.target_dir / "CONTRIBUTING.md"
+        contrib_path = self._handler_path("CONTRIBUTING.md")
         if not contrib_path.exists():
             content = """# Contributing Guidelines
 
@@ -538,7 +710,7 @@ Thank you for contributing!
 2. Follow Conventional Commits format (`feat:`, `fix:`, `docs:`, `chore:`).
 3. Update documentation for any user-facing changes.
 """
-            contrib_path.write_text(content, encoding="utf-8")
+            self._write_target("CONTRIBUTING.md", content)
             changes.append(
                 {
                     "file_path": "CONTRIBUTING.md",
@@ -555,9 +727,9 @@ Thank you for contributing!
         item_id = item.get("id", "")
         changes: List[Dict[str, Any]] = []
 
-        codeowners_path = self.target_dir / ".github" / "CODEOWNERS"
-        if not codeowners_path.exists() and not (self.target_dir / "CODEOWNERS").exists():
-            codeowners_path.parent.mkdir(parents=True, exist_ok=True)
+        codeowners_path = self._handler_path(".github/CODEOWNERS")
+        if not codeowners_path.exists() and not self._handler_path("CODEOWNERS").exists():
+            self._mkdir_target(".github")
             content = """# CODEOWNERS
 # Replace the examples below with real GitHub usernames or team names.
 # See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
@@ -565,7 +737,7 @@ Thank you for contributing!
 # src/ @team-frontend
 # docs/ @team-docs
 """
-            codeowners_path.write_text(content, encoding="utf-8")
+            self._write_target(".github/CODEOWNERS", content)
             changes.append(
                 {
                     "file_path": ".github/CODEOWNERS",
@@ -583,14 +755,14 @@ Thank you for contributing!
         changes: List[Dict[str, Any]] = []
         recommendations: List[Dict[str, Any]] = []
 
-        lic_path = self.target_dir / "LICENSE"
+        lic_path = self._handler_path("LICENSE")
         if not lic_path.exists():
             template_path = self.state_manager.paths.get_skill_path(
                 "templates", "LICENSE-APACHE-2.0.txt"
             )
             if template_path.exists():
-                lic_path.write_text(
-                    template_path.read_text(encoding="utf-8"), encoding="utf-8"
+                self._write_target(
+                    "LICENSE", template_path.read_text(encoding="utf-8")
                 )
                 changes.append(
                     {
@@ -617,8 +789,8 @@ Thank you for contributing!
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         item_id = item.get("id", "")
         changes: List[Dict[str, Any]] = []
-        sec_path = self.target_dir / "SECURITY.md"
-        if not sec_path.exists() and not (self.target_dir / ".github" / "SECURITY.md").exists():
+        sec_path = self._handler_path("SECURITY.md")
+        if not sec_path.exists() and not self._handler_path(".github/SECURITY.md").exists():
             content = """# Security Policy
 
 ## Supported Versions
@@ -633,7 +805,7 @@ https://github.com/OWNER/REPO/security/advisories/new
 Replace `OWNER/REPO` with the actual repository coordinates. Do not open a
 public issue for security-sensitive findings.
 """
-            sec_path.write_text(content, encoding="utf-8")
+            self._write_target("SECURITY.md", content)
             changes.append(
                 {
                     "file_path": "SECURITY.md",
@@ -681,9 +853,10 @@ public issue for security-sensitive findings.
         lang = (primary_lang or "unknown").lower()
 
         if lang in ("javascript", "typescript"):
-            eslint_path = self.target_dir / ".eslintrc.json"
+            eslint_path = self._handler_path(".eslintrc.json")
             if not eslint_path.exists():
-                eslint_path.write_text(
+                self._write_target(
+                    ".eslintrc.json",
                     json.dumps(
                         {
                             "env": {"browser": True, "es2021": True, "node": True},
@@ -694,7 +867,6 @@ public issue for security-sensitive findings.
                         indent=2,
                     )
                     + "\n",
-                    encoding="utf-8",
                 )
                 changes.append(
                     {
@@ -705,11 +877,11 @@ public issue for security-sensitive findings.
                     }
                 )
         elif lang == "python":
-            ruff_path = self.target_dir / "ruff.toml"
-            if not ruff_path.exists() and not (self.target_dir / "pyproject.toml").exists():
-                ruff_path.write_text(
+            ruff_path = self._handler_path("ruff.toml")
+            if not ruff_path.exists() and not self._handler_path("pyproject.toml").exists():
+                self._write_target(
+                    "ruff.toml",
                     "[lint]\nselect = ['E', 'F', 'I']\nignore = []\n",
-                    encoding="utf-8",
                 )
                 changes.append(
                     {
@@ -729,9 +901,10 @@ public issue for security-sensitive findings.
         lang = (primary_lang or "unknown").lower()
 
         if lang == "typescript":
-            tsconfig_path = self.target_dir / "tsconfig.json"
+            tsconfig_path = self._handler_path("tsconfig.json")
             if not tsconfig_path.exists():
-                tsconfig_path.write_text(
+                self._write_target(
+                    "tsconfig.json",
                     json.dumps(
                         {
                             "compilerOptions": {
@@ -747,7 +920,6 @@ public issue for security-sensitive findings.
                         indent=2,
                     )
                     + "\n",
-                    encoding="utf-8",
                 )
                 changes.append(
                     {
@@ -758,11 +930,11 @@ public issue for security-sensitive findings.
                     }
                 )
         elif lang == "python":
-            mypy_path = self.target_dir / "mypy.ini"
+            mypy_path = self._handler_path("mypy.ini")
             if not mypy_path.exists():
-                mypy_path.write_text(
+                self._write_target(
+                    "mypy.ini",
                     "[mypy]\npython_version = 3.11\nwarn_return_any = True\nwarn_unused_configs = True\n",
-                    encoding="utf-8",
                 )
                 changes.append(
                     {
@@ -947,10 +1119,11 @@ public issue for security-sensitive findings.
             passed, failed, skipped, collected = self._parse_test_counts(stdout, stderr, rc)
             tests_before = collected
 
-        # Best-effort cleanup of temporary coverage files.
+        # Best-effort cleanup of temporary coverage files (jailed so cleanup can
+        # never delete files outside the target through redirected paths).
         for cov_file in self.target_dir.glob(".coverage*"):
             try:
-                cov_file.unlink()
+                jailed_unlink(self.target_dir, cov_file)
             except Exception:  # nosec B110
                 pass
 
@@ -963,11 +1136,11 @@ public issue for security-sensitive findings.
         if framework == "pytest":
             return ["python", "-m", "pytest"]
         if framework == "jest":
-            return ["npx", "jest"]
+            return resolve_js_tool(self._work_dir, "jest")
         if framework == "vitest":
-            return ["npx", "vitest", "run"]
+            return resolve_js_tool(self._work_dir, "vitest", ["run"])
         if framework == "mocha":
-            return ["npx", "mocha"]
+            return resolve_js_tool(self._work_dir, "mocha")
         if framework == "npm-test":
             return ["npm", "test"]
         if framework == "cargo test":
@@ -982,7 +1155,7 @@ public issue for security-sensitive findings.
         if linter == "flake8":
             return ["flake8"]
         if linter == "eslint":
-            return ["npx", "eslint", "."]
+            return resolve_js_tool(self._work_dir, "eslint", ["."])
         if linter == "clippy":
             return ["cargo", "clippy"]
         if linter == "golangci-lint":
@@ -993,7 +1166,7 @@ public issue for security-sensitive findings.
         if type_checker == "mypy":
             return ["mypy", "."]
         if type_checker == "tsc":
-            return ["npx", "tsc", "--noEmit"]
+            return resolve_js_tool(self._work_dir, "tsc", ["--noEmit"])
         return None
 
     def _build_command(
@@ -1003,7 +1176,7 @@ public issue for security-sensitive findings.
             pkg = target_dir / "package.json"
             if pkg.exists():
                 try:
-                    data = json.loads(pkg.read_text(encoding="utf-8", errors="ignore"))
+                    data = json.loads(read_jailed_text(self.target_dir, pkg))
                     if "build" in data.get("scripts", {}):
                         runner = "pnpm" if build_tool == "pnpm" else ("yarn" if build_tool == "yarn" else "npm")
                         return [runner, "run", "build"]
@@ -1039,6 +1212,56 @@ public issue for security-sensitive findings.
             "details": details[:2000],
         }
 
+    def _run_checkpoint_gate(
+        self, method: str, tools: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Run the single targeted gate for a workstream checkpoint (audit P1-13)."""
+        if method == "test":
+            return self._run_verification_gate(
+                tools.get("test_framework"),
+                self._test_command(tools.get("test_framework")),
+            )
+        if method == "lint":
+            return self._run_verification_gate(
+                tools.get("linter"), self._lint_command(tools.get("linter"))
+            )
+        if method == "type_check":
+            return self._run_verification_gate(
+                tools.get("type_checker"),
+                self._type_check_command(tools.get("type_checker")),
+            )
+        # Non-executable methods (existence, file_validation, scan) are validated
+        # by the presence of the workstream's change records; no target command
+        # is executed for them.
+        return {
+            "executed": False,
+            "passed": None,
+            "status": "not_applicable",
+            "method": method,
+            "details": "Non-executable checkpoint; validated by change record existence.",
+        }
+
+    def _enforce_item_checkpoint(
+        self, method: str, tools: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Enforce one item's checkpoint and return its structured result."""
+        result = self._run_checkpoint_gate(method, tools)
+        if result.get("status") == "not_applicable":
+            return {
+                "method": method,
+                "status": "not_applicable",
+                "passed": True,
+                "details": result.get("details", ""),
+            }
+        passed = result.get("passed") is True and result.get("command_succeeded") is not False
+        return {
+            "method": method,
+            "status": "passed" if passed else "failed",
+            "passed": passed,
+            "tool": result.get("tool"),
+            "details": (result.get("details") or "")[:500],
+        }
+
     def _verify_item(
         self, item: Dict[str, Any], tools: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -1060,6 +1283,19 @@ public issue for security-sensitive findings.
             ),
         }
 
+    def _blocked_verification(self, reason: Optional[str]) -> Dict[str, Any]:
+        """Return an explicit non-executed verification shape when the trust gate refuses."""
+        detail = reason or "Target-controlled commands refused by execution trust gate"
+        gates: Dict[str, Any] = {}
+        for name in ("tests", "lint", "type_check", "build"):
+            gates[name] = {
+                "executed": False,
+                "passed": False,
+                "tool": None,
+                "details": detail,
+            }
+        return gates
+
     # ------------------------------------------------------------------
     # Rollback
     # ------------------------------------------------------------------
@@ -1076,6 +1312,13 @@ public issue for security-sensitive findings.
     def _build_rollback(
         self, changes: List[Dict[str, Any]], baseline_paths: Set[str]
     ) -> Dict[str, Any]:
+        """Build the single platform-neutral rollback representation.
+
+        Every operation is semantic (restore_content / remove_file /
+        restore_deleted / move_back), carries its owning backlog item, and
+        records the baseline content hash where applicable, so per-item and
+        whole-run rollback share one source of truth (audit P1-28).
+        """
         created: List[str] = []
         modified: List[str] = []
         deleted: List[str] = []
@@ -1104,50 +1347,43 @@ public issue for security-sensitive findings.
                 )
 
         operations: List[Dict[str, Any]] = []
-        commands: List[str] = [
-            "# Rollback commands for RUP-generated changes",
-        ]
 
-        def _add_op(op: str, argv: List[str], shell: str) -> None:
-            operations.append({"op": op, "argv": argv})
-            commands.append(shell)
+        def _add_op(op: str, path: str, **extra: Any) -> None:
+            operations.append({"op": op, "path": path, **extra})
 
-        for path in created:
-            _add_op(
-                "rm",
-                ["rm", "-f", "--", path],
-                " ".join(["rm", "-f", "--", shlex.quote(path)]),
-            )
-        for path in modified:
-            _add_op(
-                "git-checkout",
-                ["git", "checkout", "--", path],
-                " ".join(["git", "checkout", "--", shlex.quote(path)]),
-            )
-        for path in deleted:
-            _add_op(
-                "git-restore",
-                ["git", "checkout", "HEAD", "--", path],
-                " ".join(["git", "checkout", "HEAD", "--", shlex.quote(path)]),
-            )
-        for entry in renamed:
-            new_path = entry["new_path"]
-            old_path = entry["old_path"]
-            _add_op(
-                "git-mv",
-                ["git", "mv", "--", new_path, old_path],
-                " ".join(["git", "mv", "--", shlex.quote(new_path), shlex.quote(old_path)]),
-            )
-        for path in config_changed:
-            _add_op(
-                "git-checkout",
-                ["git", "checkout", "--", path],
-                " ".join(["git", "checkout", "--", shlex.quote(path)]),
-            )
+        for change in changes:
+            ctype = change.get("change_type")
+            path = change.get("file_path", "")
+            item_id = change.get("backlog_item_id", "UNASSIGNED")
+            if ctype == "create":
+                _add_op("remove_file", path, backlog_item_id=item_id)
+            elif ctype == "modify":
+                _add_op(
+                    "restore_content",
+                    path,
+                    backlog_item_id=item_id,
+                    backup_sha256=self._backups.get(path),
+                )
+            elif ctype == "delete":
+                _add_op("restore_deleted", path, backlog_item_id=item_id)
+            elif ctype == "rename":
+                _add_op(
+                    "move_back",
+                    path,
+                    old_path=change.get("old_path", path),
+                    backlog_item_id=item_id,
+                )
 
         if not operations:
-            operations.append({"op": "none", "argv": ["#", "No changes to revert"]})
-            commands.append("# No changes to revert")
+            operations.append({"op": "none", "path": None, "backlog_item_id": None})
+
+        commands: List[str] = render_rollback_commands(operations, platform="posix")
+
+        # Per-item rollback grouping for the report and the rollback workflow.
+        by_item: Dict[str, List[Dict[str, Any]]] = {}
+        for op in operations:
+            item_id = op.get("backlog_item_id") or "UNASSIGNED"
+            by_item.setdefault(item_id, []).append(op)
 
         return {
             "created": created,
@@ -1157,6 +1393,7 @@ public issue for security-sensitive findings.
             "config_changed": config_changed,
             "commands": commands,
             "operations": operations,
+            "by_item": by_item,
             "baseline_dirty_files": sorted(baseline_paths),
         }
 
@@ -1174,7 +1411,33 @@ public issue for security-sensitive findings.
         selected_ids = set(plan_data.get("selected_items", []))
         selected_items = [item for item in backlog if item.get("id") in selected_ids]
         execution_order = plan_data.get("execution_order", list(selected_ids))
-        constraints = plan_data.get("constraints", {})
+
+        # RUP-XFER-002: the escalation guard is enforced by the execution phase
+        # itself, not just by CLI orchestration, so phase-only ``rup plan; rup
+        # execute`` has the same safety semantics as ``rup run`` (audit P1-25).
+        plan_state = self.state_manager.load_json("plan-state.json")
+        if isinstance(plan_state, dict) and plan_state.get("requires_explicit_override") and not self.override_escalation:
+            raise RuntimeError(
+                "Planning produced escalations that require explicit override. "
+                "Re-run with --override-escalation to continue."
+            )
+
+        # RUP-XFER-001: Skill-only planning constraints live in plan-state.json
+        # and are authoritative. Legacy RUP_PLAN.json constraints are honored as
+        # a fallback for pre-sidecar artifacts, with a deprecation warning.
+        constraints = {}
+        if isinstance(plan_state, dict):
+            constraints = plan_state.get("constraints", {})
+        if not constraints:
+            legacy = plan_data.get("constraints", {})
+            if legacy:
+                warnings.warn(
+                    "plan-state.json has no constraints; falling back to legacy "
+                    "RUP_PLAN.json constraints (deprecated)",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+            constraints = legacy
         max_files = constraints.get("max_files", 20)
         risk_tolerance = constraints.get("risk_tolerance", "medium")
         tolerance_rank = RISK_RANK.get(risk_tolerance, 1)
@@ -1185,16 +1448,122 @@ public issue for security-sensitive findings.
             key=lambda item: order_index.get(item.get("id", ""), 9999),
         )
 
-        # RUP-EXEC-005: capture baseline Git status before applying changes.
+        # RUP-SEC-002: the adversarial trust gate runs before any target-controlled
+        # command (baseline coverage, per-item verification gates). A hostile
+        # repository cannot trigger test/build execution without --allow-exec and,
+        # when required, a detected sandbox.
+        threat_findings = scan_repository_for_threats(self.target_dir)
+        gates_allowed, gates_reason = execution_gate_status(
+            self.allow_exec, self.sandbox, threat_findings
+        )
+        execution_gate = {
+            "allowed": gates_allowed,
+            "reason": gates_reason,
+            "threat_findings": len(threat_findings),
+            "allow_exec": self.allow_exec,
+            "sandbox": self.sandbox,
+        }
+
+        # RUP-EXEC-005: capture baseline Git status and per-path content hashes
+        # before applying changes. Dirty paths are never mutated by RUP.
         baseline_paths = self._baseline_paths()
+        baseline_snapshot = self._capture_content_baseline()
 
         # Capture baseline coverage and test counts before any changes are applied.
-        baseline = self._collect_baseline_coverage()
+        # Skipped (recorded as empty) when the execution trust gate refuses
+        # target-controlled commands.
+        baseline = (
+            self._collect_baseline_coverage()
+            if gates_allowed
+            else {"coverage_before": None, "tests_before": 0}
+        )
 
         changes: List[Dict[str, Any]] = []
         recommendations: List[Dict[str, Any]] = []
         changed_files: Set[str] = set()
         per_item_completion: Dict[str, str] = {}
+        per_item_checkpoints: Dict[str, Dict[str, Any]] = {}
+
+        # RUP-PLAN-004: the planning phase emits a per-workstream checkpoint
+        # graph (verification method + success criteria). Execution enforces each
+        # item's checkpoint after its workstream instead of only a single global
+        # verification pass (audit P1-13).
+        checkpoint_methods: Dict[str, str] = {}
+        if isinstance(plan_state, dict):
+            for cp in plan_state.get("checkpoints", []) or []:
+                if isinstance(cp, dict) and cp.get("backlog_item_id"):
+                    checkpoint_methods[cp["backlog_item_id"]] = cp.get("verification_method", "existence")
+
+        # Monorepo scoping (audit P1-11): --workspace / --changed-packages.
+        ws = detect_workspace(self.target_dir)
+        scoped_names: Optional[Set[str]] = None
+        package_dirs: Dict[str, Path] = {}
+        scoped_workspace: Optional[Dict[str, Any]] = None
+        if (self.workspace or self.changed_only) and ws is not None:
+            if self.changed_only:
+                changed = changed_packages(self.target_dir, ws)
+                if changed and changed != ["all"]:
+                    scoped_names = set(changed)
+            elif self.workspace:
+                known = {p["name"] for p in ws["packages"]}
+                if self.workspace in known:
+                    scoped_names = {self.workspace}
+            if scoped_names:
+                scoped_workspace = {"tool": ws["tool"], "names": sorted(scoped_names)}
+                for p in ws["packages"]:
+                    if p["name"] in scoped_names:
+                        package_dirs[p["name"]] = self.target_dir / p["path"]
+        if (self.workspace or self.changed_only) and scoped_names is None:
+            warnings.warn(
+                "Workspace scoping requested but no matching packages found; "
+                "executing without scoping.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+        def _item_package(item: Dict[str, Any]) -> Optional[str]:
+            if ws is None:
+                return None
+            for f in item.get("scope", {}).get("files", []) or []:
+                for p in ws["packages"]:
+                    prefix = p["path"].rstrip("/") + "/"
+                    if f == p["path"] or f.startswith(prefix):
+                        return p["name"]
+            return None
+
+        if scoped_workspace is not None:
+            pkg_items: Dict[str, List[Dict[str, Any]]] = {}
+            root_items: List[Dict[str, Any]] = []
+            out_of_scope: List[Dict[str, Any]] = []
+            for item in ordered_items:
+                pkg = _item_package(item)
+                if pkg is None:
+                    root_items.append(item)
+                elif pkg in scoped_names:
+                    pkg_items.setdefault(pkg, []).append(item)
+                else:
+                    out_of_scope.append(item)
+            for item in out_of_scope:
+                item_id = item.get("id", "")
+                recommendations.append(
+                    self._recommendation(
+                        item_id,
+                        self._item_subtype(item),
+                        "AGENT_ONLY",
+                        f"Item targets a package outside the scoped workspace "
+                        f"({', '.join(sorted(scoped_names))}); skipped (RUP-MONO-001).",
+                    )
+                )
+                per_item_completion[item_id] = "AGENT_ONLY"
+            # Packages run in dependency order, then root/shared items.
+            ordered_items = []
+            for pkg_name in dependency_order(sorted(scoped_names), ws["graph"]):
+                ordered_items.extend(pkg_items.get(pkg_name, []))
+            ordered_items.extend(root_items)
+
+        tools = self.tool_detector.detect_all()
+        current_pkg: Optional[str] = None
+
         for item in ordered_items:
             item_id = item.get("id", "")
             subtype = self._item_subtype(item)
@@ -1220,26 +1589,99 @@ public issue for security-sensitive findings.
                 recommendations.append(rec)
                 per_item_completion[item_id] = "AGENT_ONLY"
                 continue
-            item_changes, item_recommendations = self._execute_workstream_item(
-                item, discovery_data
-            )
+
+            # Per-package tooling and write root: switch when crossing packages
+            # (audit P1-11), so handlers see the package's own toolchain and
+            # remediation files land inside the package directory.
+            if scoped_workspace is not None:
+                pkg = _item_package(item)
+                if pkg != current_pkg:
+                    if pkg is not None and pkg in package_dirs:
+                        self._work_dir = package_dirs[pkg]
+                        self.tool_detector = ToolDetector(self._work_dir)
+                    else:
+                        self._work_dir = self.target_dir
+                        self.tool_detector = ToolDetector(self.target_dir)
+                    tools = self.tool_detector.detect_all()
+                    current_pkg = pkg
+            try:
+                item_changes, item_recommendations = self._execute_workstream_item(
+                    item, discovery_data
+                )
+            except BaselineDirtyRefusal as exc:
+                recommendations.append(
+                    self._recommendation(
+                        item_id,
+                        subtype,
+                        "AGENT_ONLY",
+                        str(exc),
+                    )
+                )
+                per_item_completion[item_id] = "AGENT_ONLY"
+                continue
+
+            # Package-scoped writes: handler paths are work-dir relative; the
+            # recorded change paths must be target-relative for attribution,
+            # rollback, and package grouping (audit P1-11).
+            if self._work_dir != self.target_dir:
+                prefix = self._work_dir.relative_to(self.target_dir).as_posix()
+                for change in item_changes:
+                    fp = change.get("file_path")
+                    if fp and not fp.startswith(prefix + "/"):
+                        change["file_path"] = f"{prefix}/{fp}"
+
             recommendations.extend(item_recommendations)
-            per_item_completion[item_id] = self._resolve_completion(
-                item_changes, item_recommendations
-            )
+
+            # RUP-PLAN-004: enforce this item's checkpoint gate now that its
+            # workstream has run (per-item verification, not only a global pass).
+            method = checkpoint_methods.get(item_id, "existence")
+            if gates_allowed:
+                checkpoint_result = self._enforce_item_checkpoint(method, tools)
+            else:
+                checkpoint_result = {
+                    "method": method,
+                    "status": "skipped",
+                    "passed": None,
+                    "details": gates_reason,
+                }
+            per_item_checkpoints[item_id] = checkpoint_result
+
+            completion = self._resolve_completion(item_changes, item_recommendations)
+            if checkpoint_result.get("status") == "failed":
+                completion = "PARTIAL"
+                recommendations.append(
+                    self._recommendation(
+                        item_id,
+                        subtype,
+                        "PARTIAL",
+                        f"Checkpoint '{method}' failed after the workstream ran; "
+                        "remediation present but unverified (rollback available per item).",
+                    )
+                )
+            per_item_completion[item_id] = completion
+
             for change in item_changes:
                 file_path = change.get("file_path")
                 if file_path and len(changed_files) >= max_files:
                     continue
+                if file_path in self._backups:
+                    change["backup_sha256"] = self._backups[file_path]
                 changes.append(change)
                 if file_path:
                     changed_files.add(file_path)
 
         # RUP-EXEC-003: run a single local verification pass after changes are applied.
         # The canonical protocol schema expects a single {tests, lint, build, type_check}
-        # object, not a per-item map.
-        tools = self.tool_detector.detect_all()
-        local_verification = self._verify_item({}, tools)
+        # object, not a per-item map. When the trust gate refuses target-controlled
+        # commands, record an explicit non-executed shape instead of running them.
+        # Workspace-scoped runs re-detect root tooling for the aggregate pass.
+        if scoped_workspace is not None:
+            self.tool_detector = ToolDetector(self.target_dir)
+            tools = self.tool_detector.detect_all()
+        if gates_allowed:
+            local_verification = self._verify_item({}, tools)
+        else:
+            local_verification = self._blocked_verification(gates_reason)
 
         # RUP-EXEC-001/005/006: attribute only net-new changes to backlog items.
         existing_paths = {c.get("file_path") for c in changes if c.get("file_path")}
@@ -1251,6 +1693,11 @@ public issue for security-sensitive findings.
             if path in baseline_paths or (old_path and old_path in baseline_paths):
                 continue
             if path.startswith(".rup") or path.startswith("RUP_"):
+                continue
+            # Directory entries (git collapses untracked trees) are containers
+            # for the file changes already tracked; rollback removes their
+            # contents, and an empty dir cannot be `rm`-ed.
+            if (self.target_dir / path).is_dir():
                 continue
             if len(changed_files) >= max_files:
                 break
@@ -1321,9 +1768,16 @@ public issue for security-sensitive findings.
             },
             "per_item_completion": per_item_completion,
             "rollback_operations": rollback_procedure.get("operations", []),
+            "rollback_by_item": rollback_procedure.get("by_item", {}),
+            "per_item_checkpoints": per_item_checkpoints,
+            "package_changes": self._group_changes_by_package(changes, ws),
+            "scoped_workspace": scoped_workspace,
+            "baseline": baseline_snapshot,
+            "backups": dict(self._backups),
             "coverage_before": baseline["coverage_before"],
             "tests_before": baseline["tests_before"],
             "coverage_delta": None,
+            "execution_gate": execution_gate,
         }
 
         # Save machine-readable state atomically.

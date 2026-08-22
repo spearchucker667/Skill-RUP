@@ -14,9 +14,10 @@ from pathlib import Path
 from .inventory import InventoryManager, LOCKFILES
 from .tool_detection import ToolDetector
 from .redaction import scan_file_for_secrets
-from .security import scan_content_for_threats
+from .security import iter_jailed_files, scan_content_for_threats
 from .state import StateManager
 from .artifact_builder import ArtifactBuilder
+from .workspace import changed_packages, dependency_order, detect_workspace
 
 class DiscoveryPhase:
     def __init__(self, target_dir: Path, state_manager: StateManager, artifact_builder: ArtifactBuilder):
@@ -72,13 +73,14 @@ class DiscoveryPhase:
             })
 
         # --- 1.4 Security Gaps ---
-        # Secret Scanning
+        # Secret Scanning (jailed walker: repository file symlinks can never pull
+        # external content into the scan, RUP-SEC-001).
         secret_findings = []
-        for p in self.target_dir.rglob("*"):
-            if p.is_file() and not any(part in p.parts for part in [".git", ".venv", "node_modules", "dist", "build", ".rup"]):
-                findings = scan_file_for_secrets(p)
-                if findings:
-                    secret_findings.extend(findings)
+        skip_dirs = {".git", ".venv", "venv", "node_modules", "dist", "build", ".rup"}
+        for p in iter_jailed_files(self.target_dir, skip_dirnames=skip_dirs):
+            findings = scan_file_for_secrets(p)
+            if findings:
+                secret_findings.extend(findings)
 
         if secret_findings:
             gaps.append({
@@ -237,12 +239,25 @@ class DiscoveryPhase:
         gaps = self._evaluate_all_gaps(metadata, languages, tooling)
         risk_data = self._calculate_risk_and_scores(gaps, metadata)
 
+        # Canonical monorepo field (audit P1-11): the workspace package graph
+        # with per-package name/path/language/type, or null for single-package
+        # repositories.
+        ws = detect_workspace(self.target_dir)
+        monorepo = None
+        if ws is not None:
+            monorepo = {
+                "is_monorepo": True,
+                "tool": ws["tool"],
+                "packages": ws["packages"],
+            }
+
         discovery_report = {
             "repo_metadata": metadata,
             "languages": languages,
             "tooling": {
                 k: v for k, v in tooling.items() if v is not None and v != [] and v != {}
             },
+            "monorepo": monorepo,
             "gaps": gaps,
             "risk_assessment": risk_data
         }

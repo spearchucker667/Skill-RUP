@@ -49,6 +49,10 @@ EXPECTED_VERIFICATION_FAILURE = {"failing_tests", "security_findings"}
 # Fixtures where malicious root-level state must be ignored. The lifecycle is
 # allowed to succeed as long as the malicious plan was not executed.
 ADVERSARIAL_STATE_FIXTURES = {"adversarial_state"}
+# Fixtures containing adversarial instruction content. The lifecycle must refuse
+# at the pre-execution trust gate: no RUP_EXECUTION.json and no target-code
+# side effects.
+ADVERSARIAL_CONTENT_FIXTURES = {"adversarial_content"}
 
 
 def _run(cmd: List[str], cwd: Path, timeout: int = 180) -> subprocess.CompletedProcess:
@@ -207,8 +211,41 @@ def run_fixture(fixture_name: str, fixtures_base: Path) -> Tuple[bool, List[str]
     try:
         build_fixture(fixture_name, target_dir)
 
-        cmd = [sys.executable, "-m", "runtime.cli", "all", "--target", str(target_dir)]
+        # Forward tests run inside the CI runner, which is a trusted environment;
+        # they explicitly opt out of the --sandbox required default so the
+        # lifecycle can execute target tests.
+        cmd = [
+            sys.executable,
+            "-m",
+            "runtime.cli",
+            "all",
+            "--target",
+            str(target_dir),
+            "--sandbox",
+            "off",
+            # Planning may escalate an item whose mandatory dependency does not
+            # fit the run budget (dependency closure); the trusted harness
+            # explicitly overrides that guard to exercise the full lifecycle.
+            "--override-escalation",
+        ]
         result = _run(cmd, REPO_ROOT)
+
+        if fixture_name in ADVERSARIAL_CONTENT_FIXTURES:
+            # The lifecycle must stop at the pre-execution trust gate: no
+            # execution artifact and no target-code side effects.
+            if result.returncode == 0:
+                errors.append(
+                    "Lifecycle unexpectedly succeeded despite adversarial content"
+                )
+            if (target_dir / ".rup" / "RUP_EXECUTION.json").exists():
+                errors.append(
+                    "Execution phase ran despite adversarial content (missing --allow-exec)"
+                )
+            if (target_dir / "RUPTESTS_RAN").exists():
+                errors.append(
+                    "Target tests executed before the adversarial trust decision"
+                )
+            return (not errors), errors
 
         expected_verification_failure = fixture_name in EXPECTED_VERIFICATION_FAILURE
         is_adversarial = fixture_name in ADVERSARIAL_STATE_FIXTURES

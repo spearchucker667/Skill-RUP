@@ -4,8 +4,10 @@
     "category": "discovery",
     "title": "Repository Inventory",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Repository inventory is reimplemented deterministically in runtime/inventory.py (jailed walking, language detection, metadata) from the canonical phase-1 contract.",
     "implementation": [
       "runtime/inventory.py",
       "runtime/discovery.py"
@@ -30,8 +32,10 @@
     "category": "discovery",
     "title": "Tooling Detection",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Tooling detection is reimplemented in runtime/tool_detection.py (tests, linters, type checkers, CI, containers, IaC) from the canonical phase-1 tooling contract.",
     "implementation": [
       "runtime/tool_detection.py",
       "runtime/discovery.py"
@@ -56,8 +60,10 @@
     "category": "discovery",
     "title": "Quality Assessment",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "partial",
+    "port_status": "partial",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Quality assessment is partially ported: inventory plus gap heuristics in runtime/discovery.py; real coverage/duplication/complexity analysis is agent-native.",
     "implementation": [
       "runtime/discovery.py"
     ],
@@ -80,8 +86,10 @@
     "category": "discovery",
     "title": "Security Assessment",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "partial",
+    "port_status": "partial",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Security assessment is partially ported: secret scan (runtime/redaction.py) and lockfile existence; full dependency/SBOM/license analysis is agent-native.",
     "implementation": [
       "runtime/discovery.py",
       "runtime/redaction.py"
@@ -106,8 +114,10 @@
     "category": "discovery",
     "title": "Documentation Assessment",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Documentation assessment is ported as deterministic existence/gap checks in runtime/discovery.py.",
     "implementation": [
       "runtime/discovery.py"
     ],
@@ -130,8 +140,10 @@
     "category": "discovery",
     "title": "Governance Assessment",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "partial",
+    "port_status": "partial",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Governance assessment is partially ported: existence checks only; semantic usefulness of CODEOWNERS/SECURITY placeholders is not validated.",
     "implementation": [
       "runtime/discovery.py"
     ],
@@ -154,8 +166,10 @@
     "category": "discovery",
     "title": "Gap Analysis",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "CI/CD assessment is ported as deterministic workflow-file detection in runtime/discovery.py.",
     "implementation": [
       "runtime/discovery.py"
     ],
@@ -178,8 +192,10 @@
     "category": "planning",
     "title": "Backlog Generation",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Backlog creation is ported: gaps become prioritized backlog items in runtime/planning.py.",
     "implementation": [
       "runtime/planning.py"
     ],
@@ -202,8 +218,10 @@
     "category": "planning",
     "title": "Risk Analysis",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Risk analysis is ported: severity-weighted risk scoring per backlog item in runtime/planning.py.",
     "implementation": [
       "runtime/planning.py"
     ],
@@ -226,8 +244,10 @@
     "category": "planning",
     "title": "Work Selection",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "partial",
+    "port_status": "partial",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Work selection is partially ported: budget/risk tolerance respected, but dependency closure is not enforced (audit P1-12).",
     "implementation": [
       "runtime/planning.py"
     ],
@@ -250,8 +270,10 @@
     "category": "planning",
     "title": "Execution Planning",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "partial",
+    "port_status": "partial",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Execution planning is partially ported: topological ordering emitted, but no checkpoint graph with verification methods (audit P1-13).",
     "implementation": [
       "runtime/planning.py"
     ],
@@ -270,22 +292,217 @@
     }
   },
   {
-    "id": "rup.phase_3_execution.workstreams",
+    "id": "rup.phase_3_execution.workstreams.bug_fixes",
     "category": "execution",
-    "title": "Workstream Dispatch & Fix Implementation",
+    "title": "Fix identified bugs with regression tests",
     "mandatory": true,
-    "port_status": "ported",
-    "verification_level": "runtime_smoke_verified",
+    "port_class": "agent_native",
+    "port_status": "agent_native",
+    "verification_level": "behaviorally_verified",
+    "transfer_rationale": "Agent-native: the canonical reproduce-fix-3x-docs loop requires model reasoning; runtime/execution.py emits an AGENT_ONLY recommendation (audit P1-8).",
     "implementation": [
       "runtime/execution.py"
     ],
     "required_symbols": [
-      "ExecutionPhase"
+      "ExecutionPhase",
+      "_handle_bugs"
     ],
-    "runtime_smoke_tests": [
-      "tests/forward/test_execute.py::test_execute_execution"
+    "runtime_smoke_tests": [],
+    "semantic_tests": [
+      "tests/test_execution.py::test_bug_workstream_emits_agent_only_recommendation"
     ],
-    "semantic_tests": [],
+    "translation_type": "agent-native-deterministic",
+    "canonical_source": {
+      "repository": "https://github.com/spearchucker667/RUP-Protocol",
+      "version": "3.0.0",
+      "commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb"
+    }
+  },
+  {
+    "id": "rup.phase_3_execution.workstreams.tests",
+    "category": "execution",
+    "title": "Add missing tests for critical paths",
+    "mandatory": true,
+    "port_class": "partial",
+    "port_status": "partial",
+    "verification_level": "behaviorally_verified",
+    "transfer_rationale": "Partial: scaffolds pytest.ini and tests/ but does not author substantive tests (audit P1-9); test authoring is agent-native.",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "required_symbols": [
+      "ExecutionPhase",
+      "_handle_tests"
+    ],
+    "runtime_smoke_tests": [],
+    "semantic_tests": [
+      "tests/test_execution.py::test_test_workstream_creates_pytest_ini_and_recommends_tests"
+    ],
+    "translation_type": "agent-native-deterministic",
+    "canonical_source": {
+      "repository": "https://github.com/spearchucker667/RUP-Protocol",
+      "version": "3.0.0",
+      "commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb"
+    }
+  },
+  {
+    "id": "rup.phase_3_execution.workstreams.ci_cd",
+    "category": "execution",
+    "title": "Add or fix CI/CD workflows",
+    "mandatory": true,
+    "port_class": "deterministic",
+    "port_status": "deterministic",
+    "verification_level": "behaviorally_verified",
+    "transfer_rationale": "Deterministic: generates platform CI workflows from detected package managers in runtime/execution.py (_handle_ci).",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "required_symbols": [
+      "ExecutionPhase",
+      "_handle_ci"
+    ],
+    "runtime_smoke_tests": [],
+    "semantic_tests": [
+      "tests/test_execution.py::test_ci_generator_uses_detected_package_manager"
+    ],
+    "translation_type": "agent-native-deterministic",
+    "canonical_source": {
+      "repository": "https://github.com/spearchucker667/RUP-Protocol",
+      "version": "3.0.0",
+      "commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb"
+    }
+  },
+  {
+    "id": "rup.phase_3_execution.workstreams.security",
+    "category": "execution",
+    "title": "Address security gaps",
+    "mandatory": true,
+    "port_class": "partial",
+    "port_status": "partial",
+    "verification_level": "behaviorally_verified",
+    "transfer_rationale": "Partial: SECURITY.md generation is deterministic; secret rotation is agent-native; lockfile remediation is partial (runtime/execution.py security handlers).",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "required_symbols": [
+      "ExecutionPhase",
+      "_handle_security_policy",
+      "_handle_secret_exposure"
+    ],
+    "runtime_smoke_tests": [],
+    "semantic_tests": [
+      "tests/test_execution.py::test_security_subtypes_dispatch_correctly"
+    ],
+    "translation_type": "agent-native-deterministic",
+    "canonical_source": {
+      "repository": "https://github.com/spearchucker667/RUP-Protocol",
+      "version": "3.0.0",
+      "commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb"
+    }
+  },
+  {
+    "id": "rup.phase_3_execution.workstreams.documentation",
+    "category": "execution",
+    "title": "Improve documentation",
+    "mandatory": true,
+    "port_class": "deterministic",
+    "port_status": "deterministic",
+    "verification_level": "behaviorally_verified",
+    "transfer_rationale": "Deterministic: README/CONTRIBUTING scaffold generation in runtime/execution.py (_handle_readme/_handle_contributing).",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "required_symbols": [
+      "ExecutionPhase",
+      "_handle_readme",
+      "_handle_contributing"
+    ],
+    "runtime_smoke_tests": [],
+    "semantic_tests": [
+      "tests/test_execution.py::test_rup_only_changes_attributed_to_backlog_items"
+    ],
+    "translation_type": "agent-native-deterministic",
+    "canonical_source": {
+      "repository": "https://github.com/spearchucker667/RUP-Protocol",
+      "version": "3.0.0",
+      "commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb"
+    }
+  },
+  {
+    "id": "rup.phase_3_execution.workstreams.governance",
+    "category": "execution",
+    "title": "Add governance and automation",
+    "mandatory": true,
+    "port_class": "partial",
+    "port_status": "partial",
+    "verification_level": "behaviorally_verified",
+    "transfer_rationale": "Partial: CODEOWNERS/LICENSE handling is deterministic but emits placeholder owners and auto-selects Apache-2.0 (audit P1-30/31/32); legal decisions are agent-native.",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "required_symbols": [
+      "ExecutionPhase",
+      "_handle_codeowners",
+      "_handle_license"
+    ],
+    "runtime_smoke_tests": [],
+    "semantic_tests": [
+      "tests/test_execution.py::test_truncated_license_is_not_generated"
+    ],
+    "translation_type": "agent-native-deterministic",
+    "canonical_source": {
+      "repository": "https://github.com/spearchucker667/RUP-Protocol",
+      "version": "3.0.0",
+      "commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb"
+    }
+  },
+  {
+    "id": "rup.phase_3_execution.workstreams.containerization",
+    "category": "execution",
+    "title": "Add containerization best practices",
+    "mandatory": true,
+    "port_class": "not_ported",
+    "port_status": "not_ported",
+    "verification_level": "behaviorally_verified",
+    "transfer_rationale": "Not ported: _handle_container routes to AGENT_ONLY; canonical Dockerfile/Compose guidance remains reference-only in workflows/ (audit P1-10).",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "required_symbols": [
+      "ExecutionPhase",
+      "_handle_container"
+    ],
+    "runtime_smoke_tests": [],
+    "semantic_tests": [
+      "tests/test_execution.py::test_container_iac_observability_are_not_ported"
+    ],
+    "translation_type": "agent-native-deterministic",
+    "canonical_source": {
+      "repository": "https://github.com/spearchucker667/RUP-Protocol",
+      "version": "3.0.0",
+      "commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb"
+    }
+  },
+  {
+    "id": "rup.phase_3_execution.workstreams.observability",
+    "category": "execution",
+    "title": "Add logging, metrics, tracing",
+    "mandatory": true,
+    "port_class": "not_ported",
+    "port_status": "not_ported",
+    "verification_level": "behaviorally_verified",
+    "transfer_rationale": "Not ported: _handle_observability routes to AGENT_ONLY; canonical logging/metrics/tracing guidance remains reference-only (audit P1-10).",
+    "implementation": [
+      "runtime/execution.py"
+    ],
+    "required_symbols": [
+      "ExecutionPhase",
+      "_handle_observability"
+    ],
+    "runtime_smoke_tests": [],
+    "semantic_tests": [
+      "tests/test_execution.py::test_container_iac_observability_are_not_ported"
+    ],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
       "repository": "https://github.com/spearchucker667/RUP-Protocol",
@@ -298,8 +515,10 @@
     "category": "verification",
     "title": "Test Verification",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Deterministic: test gates with 3-run flakiness detection in runtime/verification.py.",
     "implementation": [
       "runtime/verification.py"
     ],
@@ -322,8 +541,10 @@
     "category": "verification",
     "title": "Lint Verification",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Deterministic: lint/build gates now require rc==0 plus semantic results (RUP-VERIFY-001).",
     "implementation": [
       "runtime/verification.py"
     ],
@@ -346,8 +567,10 @@
     "category": "verification",
     "title": "Security Verification",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "partial",
+    "port_status": "partial",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Partial: security gates run, but secret scanning can report incomplete coverage and pattern coverage is below the canonical contract (audit P1-20/21).",
     "implementation": [
       "runtime/verification.py"
     ],
@@ -370,8 +593,10 @@
     "category": "verification",
     "title": "Build Verification",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Deterministic: type-check gate requires rc==0 (RUP-VERIFY-001).",
     "implementation": [
       "runtime/verification.py"
     ],
@@ -394,8 +619,10 @@
     "category": "verification",
     "title": "Documentation Verification",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "partial",
+    "port_status": "partial",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Partial: documentation verification is not implemented as a gate (audit P1-5).",
     "implementation": [
       "runtime/verification.py"
     ],
@@ -418,8 +645,10 @@
     "category": "verification",
     "title": "Report Generation",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Deterministic: certification aggregates gate results into RUP_VERIFICATION artifacts (runtime/verification.py, runtime/artifact_builder.py).",
     "implementation": [
       "runtime/reporting.py",
       "runtime/artifact_builder.py"
@@ -444,8 +673,10 @@
     "category": "security",
     "title": "Adversarial Defense & Path Jail",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "behaviorally_verified",
+    "transfer_rationale": "Deterministic: path jail, jailed I/O, prompt-injection scan, secret redaction, and sandbox gating in runtime/security.py, runtime/redaction.py, runtime/command_runner.py (RUP-SEC-001/002).",
     "implementation": [
       "runtime/security.py",
       "runtime/redaction.py"
@@ -473,8 +704,10 @@
     "category": "state",
     "title": "Run Manifest & State Management",
     "mandatory": true,
-    "port_status": "ported",
+    "port_class": "deterministic",
+    "port_status": "deterministic",
     "verification_level": "runtime_smoke_verified",
+    "transfer_rationale": "Deterministic: atomic state persistence, run manifests, and session state in runtime/state.py and runtime/models.py.",
     "implementation": [
       "runtime/state.py",
       "runtime/models.py"

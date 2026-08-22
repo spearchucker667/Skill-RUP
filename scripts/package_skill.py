@@ -15,7 +15,7 @@ import sys
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set
 
 
 # Fixed ZIP timestamp for reproducibility (1980-01-01 00:00:00 is the earliest
@@ -62,6 +62,29 @@ def normalize_version(version: str) -> str:
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError(f"version must be semantic (MAJOR.MINOR.PATCH), got: {version}")
     return version
+
+
+def _collect_symlinked_members(root_dir: Path, ignored: Set[str]) -> List[str]:
+    """Return relpaths of all symlinked files/dirs that would be packaged.
+
+    A repository symlink can pull content from outside the skill root into the
+    release artifact (RUP-SEC-001 packaging variant), so packaging refuses
+    symlinked members outright. This pre-scan respects the same ignore rules as
+    the archive walk and never follows directory symlinks.
+    """
+    symlinks: List[str] = []
+    for dirpath, dirnames, filenames in os.walk(root_dir, followlinks=False):
+        dirnames[:] = sorted(
+            d for d in dirnames if _should_include(Path(dirpath) / d, root_dir, ignored)
+        )
+        filenames = sorted(
+            f for f in filenames if _should_include(Path(dirpath) / f, root_dir, ignored)
+        )
+        for name in dirnames + filenames:
+            p = Path(dirpath) / name
+            if p.is_symlink():
+                symlinks.append(p.relative_to(root_dir).as_posix())
+    return symlinks
 
 
 def _should_include(path: Path, root: Path, ignored: Set[str]) -> bool:
@@ -123,6 +146,15 @@ def package_skill(
     }
 
     manifest: Dict[str, str] = {}
+    member_types: Dict[str, str] = {}
+
+    # Refuse symlinked members before writing any archive bytes.
+    symlinked_members = _collect_symlinked_members(root_dir, ignored)
+    if symlinked_members:
+        raise RuntimeError(
+            "Refusing to package symlinked members (may point outside the skill "
+            "root): " + ", ".join(sorted(symlinked_members))
+        )
 
     # Walk the source tree in sorted order for reproducibility.
     with zipfile.ZipFile(out_path, "w") as zf:
@@ -150,6 +182,7 @@ def package_skill(
                 data = file_path.read_bytes()
                 zf.writestr(_zip_info(arcname), data)
                 manifest[arcname] = hashlib.sha256(data).hexdigest()
+                member_types[arcname] = "file"
 
         # Build and include the manifest before closing the archive.
         created_at = _deterministic_timestamp()
@@ -158,6 +191,7 @@ def package_skill(
             "version": version,
             "created_at": created_at,
             "files": dict(sorted(manifest.items())),
+            "member_types": dict(sorted(member_types.items())),
         }
         manifest_bytes = json.dumps(package_manifest, indent=2, sort_keys=True).encode("utf-8")
         manifest_arcname = f"{SKILL_DIR_NAME}/manifest.json"
@@ -198,11 +232,23 @@ def verify_package(out_path: Path) -> int:
             return 1
 
         expected_files = manifest.get("files", {})
+        member_types = manifest.get("member_types", {})
         verified = 0
         failed = 0
         for arcname, expected_sha in sorted(expected_files.items()):
             if arcname not in names:
                 _error(f"Manifest references missing file: {arcname}")
+                failed += 1
+                continue
+            if member_types.get(arcname, "file") != "file":
+                _error(f"Member {arcname} has unsupported declared type: {member_types.get(arcname)}")
+                failed += 1
+                continue
+            info = zf.getinfo(arcname)
+            # Reject archive entries carrying symlink permissions even if the
+            # manifest declared them as regular files.
+            if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                _error(f"Member {arcname} is a symlink inside the archive")
                 failed += 1
                 continue
             actual = hashlib.sha256(zf.read(arcname)).hexdigest()
@@ -305,7 +351,11 @@ def main() -> int:
     if args.verify:
         return verify_package(out_path)
 
-    package_skill(root_dir, out_path, version)
+    try:
+        package_skill(root_dir, out_path, version)
+    except RuntimeError as e:
+        _error(str(e))
+        return 1
     return 0
 
 

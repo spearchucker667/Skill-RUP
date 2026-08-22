@@ -179,6 +179,47 @@ def test_run_id_is_unique_per_invocation(tmp_path):
     assert state_b.run_id.startswith("rup-")
 
 
+def test_run_id_incorporates_plan_state_constraints(tmp_path):
+    """RUP-XFER-001: run IDs must include plan-state.json constraints."""
+    paths = RupPaths(tmp_path)
+    state_dir = tmp_path / ".rup"
+    state_dir.mkdir(parents=True, exist_ok=True)
+
+    (state_dir / "plan-state.json").write_text(
+        json.dumps(
+            {
+                "constraints": {
+                    "max_files": 1,
+                    "risk_tolerance": "low",
+                    "time_budget_minutes": 15,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    state_a = StateManager(paths)
+
+    (state_dir / "plan-state.json").write_text(
+        json.dumps(
+            {
+                "constraints": {
+                    "max_files": 99,
+                    "risk_tolerance": "high",
+                    "time_budget_minutes": 999,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    state_b = StateManager(paths)
+
+    (state_dir / "plan-state.json").write_text(json.dumps({}), encoding="utf-8")
+    state_c = StateManager(paths)
+
+    assert state_a.run_id != state_b.run_id
+    assert state_b.run_id != state_c.run_id
+
+
 def test_run_id_differs_for_different_targets(tmp_path):
     """RUP-STATE-002: run IDs must differ for different target paths."""
     target_a = tmp_path / "repo_a"

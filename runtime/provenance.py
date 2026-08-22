@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .command_runner import run_command
+from .security import iter_jailed_files
 from .source_authority import SOURCE_AUTHORITY
 
 CANONICAL_RUP_REPO = SOURCE_AUTHORITY["canonical_repo"]
@@ -47,6 +48,277 @@ UPSTREAM_TO_LOCAL_MAP: Dict[str, str] = {
     "examples/README.md": "examples/README.md",
     "examples/rup_mock_walkthrough.md": "examples/rup_mock_walkthrough.md",
     "examples/mock_scenario_summary.json": "examples/mock_scenario_summary.json",
+}
+
+# Curated rationale for upstream files that are intentionally not transferred
+# into Skill-RUP (audit P1-4). Each entry classifies WHY the file was omitted
+# and points to the downstream artifact (runtime module, workflow, reference,
+# or capability ID) that preserves the upstream behavior:
+#   - irrelevant_to_skill       : content has no bearing on the skill's operation
+#   - represented_elsewhere     : behavior preserved in another downstream artifact
+#   - agent_native              : behavior requires model/agent judgment
+#   - runtime_translated        : behavior implemented in the deterministic runtime
+#   - development_only          : upstream repo's own tooling/CI/tests, not protocol
+#   - superseded                : replaced by a newer downstream implementation
+#   - intentionally_not_supported: explicitly out of scope
+_OMISSION_RATIONALE: Dict[str, Dict[str, Any]] = {
+    # --- Upstream repository self-artifacts (not protocol content) ---
+    ".github/workflows/ci.yml": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own CI workflow; Skill-RUP maintains its own matrix CI.",
+        "implemented_in": [".github/workflows/ci.yml"],
+    },
+    ".github/workflows/codeql.yml": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own CodeQL workflow; Skill-RUP runs its own CodeQL.",
+        "implemented_in": [".github/workflows/security-scan.yml"],
+    },
+    ".github/workflows/link-check.yml": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own link-check workflow.",
+        "implemented_in": ["scripts/check_docs.py"],
+    },
+    ".github/workflows/publish.yml": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own publish workflow.",
+        "implemented_in": [],
+    },
+    ".github/workflows/release-drafter.yml": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Upstream repository's release-drafter automation, unrelated to runtime behavior.",
+        "implemented_in": [],
+    },
+    ".github/workflows/supply-chain.yml": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own supply-chain scan workflow.",
+        "implemented_in": [".github/workflows/security-scan.yml"],
+    },
+    ".github/workflows/validate.yml": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own validation workflow; equivalent gates live in Skill-RUP CI.",
+        "implemented_in": [".github/workflows/ci.yml"],
+    },
+    ".github/dependabot.yml": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "Dependency-update automation is covered by the canonical dependency management guidance in the workflows and references.",
+        "implemented_in": ["workflows/"],
+    },
+    ".github/release-drafter.yml": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Upstream repository's release-drafter configuration, unrelated to runtime behavior.",
+        "implemented_in": [],
+    },
+    ".github/FUNDING.yml": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Upstream repository funding metadata, no runtime relevance.",
+        "implemented_in": [],
+    },
+    ".github/copilot-instructions.md": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Upstream editor-assistant instructions, no runtime relevance.",
+        "implemented_in": [],
+    },
+    ".github/ISSUE_TEMPLATE/bug_report.md": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "The canonical bug report template is carried in rup-protocol.yaml (bug_fixes workstream) and the governance workflows.",
+        "implemented_in": ["protocol/rup-protocol.yaml", "workflows/"],
+    },
+    ".github/ISSUE_TEMPLATE/feature_request.md": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "Feature request template content is preserved in the governance workflows and references.",
+        "implemented_in": ["workflows/"],
+    },
+    ".github/ISSUE_TEMPLATE/config.yml": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Upstream issue-template routing metadata, no runtime relevance.",
+        "implemented_in": [],
+    },
+    ".github/pull_request_template.md": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "PR template guidance is preserved in the governance workflows.",
+        "implemented_in": ["workflows/"],
+    },
+    ".github/SECURITY.md": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "Security policy content is generated by the runtime security workstream and documented in the security workflows.",
+        "implemented_in": ["runtime/execution.py", "workflows/"],
+    },
+    ".github/CODEOWNERS": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "CODEOWNERS generation is implemented by the runtime governance workstream.",
+        "implemented_in": ["runtime/execution.py"],
+    },
+    ".gitignore": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own ignore rules; Skill-RUP maintains its own.",
+        "implemented_in": [".gitignore"],
+    },
+    "AGENTS.md": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own agent instructions, superseded by SKILL.md and AGENTS.md.",
+        "implemented_in": ["SKILL.md", "AGENTS.md"],
+    },
+    "CODEOWNERS": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "CODEOWNERS generation is implemented by the runtime governance workstream.",
+        "implemented_in": ["runtime/execution.py"],
+    },
+    "CONTRIBUTING.md": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "Contributing guidance is preserved in the documentation workflows and generated by the runtime documentation workstream.",
+        "implemented_in": ["runtime/execution.py", "workflows/"],
+    },
+    "LICENSE": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "License handling is implemented by the runtime governance workstream; attribution is in THIRD_PARTY_NOTICES.md.",
+        "implemented_in": ["runtime/execution.py", "THIRD_PARTY_NOTICES.md"],
+    },
+    "Makefile": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Upstream build convenience wrapper; Skill-RUP uses documented script entry points.",
+        "implemented_in": ["scripts/", "requirements-ci.txt"],
+    },
+    "README.md": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "Upstream repository README; the skill's operational projection lives in SKILL.md and this repository's README.md.",
+        "implemented_in": ["SKILL.md", "README.md"],
+    },
+    "TODO.md": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's internal TODO list.",
+        "implemented_in": [],
+    },
+    # --- Upstream governance template directory ---
+    "governance/CODEOWNERS": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "Canonical governance guidance is preserved in the governance workflows.",
+        "implemented_in": ["workflows/"],
+    },
+    "governance/CONTRIBUTING.md": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "Canonical governance guidance is preserved in the governance workflows.",
+        "implemented_in": ["workflows/"],
+    },
+    "governance/templates/bug_report.md": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "Issue template guidance is preserved in the governance workflows and the canonical protocol.",
+        "implemented_in": ["protocol/rup-protocol.yaml", "workflows/"],
+    },
+    "governance/templates/feature_request.md": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "Issue template guidance is preserved in the governance workflows.",
+        "implemented_in": ["workflows/"],
+    },
+    # --- Upstream development tooling ---
+    "package.json": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own JavaScript manifest for its validator tooling.",
+        "implemented_in": [],
+    },
+    "package-lock.json": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own lockfile for its validator tooling.",
+        "implemented_in": [],
+    },
+    "requirements.txt": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own Python requirements; Skill-RUP pins its own in requirements-ci.txt.",
+        "implemented_in": ["requirements-ci.txt"],
+    },
+    "ruff.toml": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own lint configuration.",
+        "implemented_in": [],
+    },
+    "tools/lint_docs.py": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream documentation lint tool; Skill-RUP ships scripts/check_docs.py.",
+        "implemented_in": ["scripts/check_docs.py"],
+    },
+    "tools/scripts/validate_rup.sh": {
+        "rationale_class": "superseded",
+        "rationale": "Replaced by the cross-platform scripts/validate_rup.py CLI.",
+        "implemented_in": ["scripts/validate_rup.py"],
+    },
+    # --- Upstream self-run artifacts ---
+    "runs/README.md": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Upstream repository's self-run scratch output, not protocol content.",
+        "implemented_in": [],
+    },
+    "runs/self-2026-01-26/discovery.json": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Upstream repository's self-run scratch output, not protocol content.",
+        "implemented_in": [],
+    },
+    "runs/self-2026-01-26/execution.json": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Upstream repository's self-run scratch output, not protocol content.",
+        "implemented_in": [],
+    },
+    "runs/self-2026-01-26/plan.json": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Upstream repository's self-run scratch output, not protocol content.",
+        "implemented_in": [],
+    },
+    "runs/self-2026-01-26/verification.json": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Upstream repository's self-run scratch output, not protocol content.",
+        "implemented_in": [],
+    },
+    # --- Upstream security folder ---
+    "security/.gitkeep": {
+        "rationale_class": "irrelevant_to_skill",
+        "rationale": "Empty directory placeholder.",
+        "implemented_in": [],
+    },
+    "security/SECURITY.md": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "Security policy content is generated by the runtime security workstream.",
+        "implemented_in": ["runtime/execution.py", "workflows/"],
+    },
+    # --- Upstream test suite (repo self-tests, not protocol) ---
+    "tests/test_links.py": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own link tests; Skill-RUP has its own pytest suite.",
+        "implemented_in": ["tests/", "scripts/check_docs.py"],
+    },
+    "tests/test_parity.py": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own parity tests; Skill-RUP has its own capability/provenance checks.",
+        "implemented_in": ["scripts/build_capability_map.py", "scripts/audit_sources.py"],
+    },
+    "tests/test_security.py": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own security tests; Skill-RUP has its own security regression suite.",
+        "implemented_in": ["tests/security/", "tests/test_security_scanning.py"],
+    },
+    "tests/test_validation.py": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream repository's own validation tests; Skill-RUP has its own validator tests.",
+        "implemented_in": ["tests/test_validator_cli.py"],
+    },
+    "tests/validation.test.js": {
+        "rationale_class": "development_only",
+        "rationale": "Upstream JavaScript validator test; the Python validator is authoritative in Skill-RUP.",
+        "implemented_in": ["scripts/validate_rup.py", "scripts/validate_rup.js"],
+    },
+    # --- Upstream validators (superseded by the Skill-RUP validator) ---
+    "validators/README.md": {
+        "rationale_class": "represented_elsewhere",
+        "rationale": "Validator usage is documented in scripts/README.md and the schema directory.",
+        "implemented_in": ["scripts/README.md", "schemas/"],
+    },
+    "validators/validate_rup.js": {
+        "rationale_class": "superseded",
+        "rationale": "Replaced by the cross-platform scripts/validate_rup.py and the retained JS validator.",
+        "implemented_in": ["scripts/validate_rup.py", "scripts/validate_rup.js"],
+    },
+    "validators/validate_rup.py": {
+        "rationale_class": "superseded",
+        "rationale": "Replaced by the reworked scripts/validate_rup.py CLI with schema drift checks.",
+        "implemented_in": ["scripts/validate_rup.py"],
+    },
 }
 
 # Overrides for upstream files that are intentionally not verbatim copies.
@@ -300,6 +572,14 @@ def build_transfer_manifest(
         }
 
         if destination_path is None:
+            omission = _OMISSION_RATIONALE.get(
+                source_path,
+                {
+                    "rationale_class": "irrelevant_to_skill",
+                    "rationale": "Not used as an authoritative source in the Skill-RUP downstream package.",
+                    "implemented_in": [],
+                },
+            )
             record.update(
                 {
                     "destination_path": None,
@@ -308,7 +588,9 @@ def build_transfer_manifest(
                     "destination_sha256": None,
                     "destination_git_blob_sha": None,
                     "parity_tests": [],
-                    "rationale": "Not used as an authoritative source in the Skill-RUP downstream package.",
+                    "rationale_class": omission["rationale_class"],
+                    "rationale": omission["rationale"],
+                    "implemented_in": omission["implemented_in"],
                 }
             )
             transfers.append(record)
@@ -324,7 +606,9 @@ def build_transfer_manifest(
                     "destination_sha256": None,
                     "destination_git_blob_sha": None,
                     "parity_tests": [],
+                    "rationale_class": "unaccounted",
                     "rationale": "Mapped to a local destination path but the file does not exist in this checkout.",
+                    "implemented_in": [],
                 }
             )
             transfers.append(record)
@@ -356,7 +640,9 @@ def build_transfer_manifest(
                 "destination_sha256": dest_sha256,
                 "destination_git_blob_sha": dest_git_blob,
                 "parity_tests": parity_tests,
+                "rationale_class": transfer_type,
                 "rationale": rationale,
+                "implemented_in": [destination_path],
             }
         )
         transfers.append(record)
@@ -394,13 +680,21 @@ def verify_transfer_manifest(
     failures: List[Dict[str, Any]] = []
     checked = 0
     passed = 0
+    omitted = 0
+    exact_copies = 0
+    derived = 0
+    translated = 0
 
     transfers = transfer_manifest.get("transfers", [])
     recorded_source_paths = {t["source_path"] for t in transfers}
     upstream_paths = set(upstream_tree.keys())
 
     # Full coverage: every upstream path must be accounted for and no phantom
-    # source paths may appear in the manifest.
+    # source paths may appear in the manifest. Unaccounted paths are reported
+    # separately from transferred passes; they never increase any pass count.
+    unaccounted = len(upstream_paths - recorded_source_paths) + len(
+        recorded_source_paths - upstream_paths
+    )
     for missing in upstream_paths - recorded_source_paths:
         failures.append(
             {
@@ -443,7 +737,10 @@ def verify_transfer_manifest(
         # records; an omitted upstream file must still be the file we think it is.
         checked += 1
         if destination_path is None:
-            passed += 1
+            # A justified omission is provenance completeness, not a transfer
+            # pass: it can never increase the transferred/parity-passed count
+            # (audit P1-3).
+            omitted += 1
             continue
 
         dest_file = skill_root / destination_path
@@ -485,11 +782,27 @@ def verify_transfer_manifest(
             continue
 
         passed += 1
+        transfer_type = transfer.get("transfer_type", "derived")
+        if transfer_type == "exact_copy":
+            exact_copies += 1
+        elif transfer_type == "translated":
+            translated += 1
+        else:
+            derived += 1
 
     return {
         "valid": len(failures) == 0,
+        "upstream_files": len(upstream_paths),
         "checked": checked,
         "passed": passed,
+        "exact_copies": exact_copies,
+        "derived": derived,
+        "translated": translated,
+        "omitted_with_justification": omitted,
+        "unaccounted": unaccounted,
+        # Canonical parity is never auto-claimed; the runtime verifies hashes,
+        # while behavioral parity requires the semantic tests per capability.
+        "semantic_parity_verified": 0,
         "failed": len(failures),
         "failures": failures,
     }
@@ -512,15 +825,11 @@ class ProvenanceManager:
             :func:`build_transfer_manifest`.
         """
         manifest_files = []
-        for p in sorted(self.repo_root.rglob("*")):
-            if not p.is_file():
-                continue
-            if any(
-                part in p.parts
-                for part in [".git", ".venv", "__pycache__", ".reference", "dist", "build"]
-            ):
-                continue
-
+        skip_dirs = {".git", ".venv", "__pycache__", ".reference", "dist", "build"}
+        for p in sorted(
+            iter_jailed_files(self.repo_root, skip_dirnames=skip_dirs),
+            key=lambda path: str(path),
+        ):
             rel = p.relative_to(self.repo_root)
             manifest_files.append(
                 {

@@ -11,8 +11,9 @@ def test_verify_execution(tmp_path):
 
     run_discovery(repo_dir)
     run_plan(repo_dir)
-    run_execute(repo_dir)
-    run_verify(repo_dir)
+    # Trusted CI harness: opt out of the --sandbox required default.
+    run_execute(repo_dir, sandbox="off", override_escalation=True)
+    run_verify(repo_dir, sandbox="off")
 
     assert (repo_dir / ".rup" / "RUP_VERIFICATION.json").exists()
     assert (repo_dir / ".rup" / "RUP_VERIFICATION.md").exists()
@@ -39,8 +40,8 @@ def test_verify_run_id_is_preserved_with_resume(tmp_path):
     discovery_state = StateManager(RupPaths(repo_dir)).load_json("session-state.json")
 
     run_plan(repo_dir, resume=True)
-    run_execute(repo_dir, resume=True)
-    run_verify(repo_dir, resume=True)
+    run_execute(repo_dir, resume=True, sandbox="off", override_escalation=True)
+    run_verify(repo_dir, resume=True, sandbox="off")
     verify_state = StateManager(RupPaths(repo_dir)).load_json("session-state.json")
 
     assert discovery_state["run_id"] == verify_state["run_id"]
@@ -57,8 +58,8 @@ def test_verify_run_id_is_unique_without_resume(tmp_path):
     discovery_state = StateManager(RupPaths(repo_dir)).load_json("session-state.json")
 
     run_plan(repo_dir)
-    run_execute(repo_dir)
-    run_verify(repo_dir)
+    run_execute(repo_dir, sandbox="off", override_escalation=True)
+    run_verify(repo_dir, sandbox="off")
     verify_state = StateManager(RupPaths(repo_dir)).load_json("session-state.json")
 
     assert discovery_state["run_id"] != verify_state["run_id"]

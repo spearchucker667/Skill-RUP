@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-19T10:05:25.368663Z",
+  "generated_at": "2026-08-22T05:43:27.125761Z",
   "canonical_repository": "https://github.com/spearchucker667/RUP-Protocol",
   "canonical_commit": "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb",
   "canonical_protocol_version": "3.0.0",
@@ -11,8 +11,15 @@
   "transfers_recorded": 63,
   "verification": {
     "valid": true,
+    "upstream_files": 63,
     "checked": 63,
-    "passed": 63,
+    "passed": 12,
+    "exact_copies": 12,
+    "derived": 0,
+    "translated": 0,
+    "omitted_with_justification": 51,
+    "unaccounted": 0,
+    "semantic_parity_verified": 0,
     "failed": 0,
     "failures": []
   }

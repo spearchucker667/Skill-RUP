@@ -11,7 +11,13 @@ from pathlib import Path
 from typing import Any, Dict, Optional, List
 from .paths import RupPaths
 from .models import RunManifest, SessionState
-from .security import enforce_path_jail, safe_load_yaml, safe_load_json
+from .security import (
+    MAX_FILE_BYTES,
+    enforce_path_jail,
+    open_jailed_read,
+    safe_load_yaml,
+    safe_load_json,
+)
 from .command_runner import run_command
 from .source_authority import CANONICAL_RUP_COMMIT, CANONICAL_PROTOCOL_VERSION
 
@@ -79,13 +85,28 @@ class StateManager:
         return None
 
     def _generate_run_id(self) -> str:
-        """Generate a run ID using target commit and existing constraints if known."""
+        """Generate a run ID using target commit and existing constraints if known.
+
+        Planning constraints moved to the Skill-only ``plan-state.json`` sidecar;
+        that file is authoritative. A legacy fallback to ``RUP_PLAN.json`` is
+        retained for pre-sidecar artifacts and emits a deprecation warning.
+        """
         target_commit = self._get_target_commit()
         constraints = {}
         try:
-            plan = self.load_json("RUP_PLAN.json")
-            if plan and "constraints" in plan:
-                constraints = plan["constraints"]
+            plan_state = self.load_json("plan-state.json")
+            if isinstance(plan_state, dict) and plan_state.get("constraints"):
+                constraints = plan_state["constraints"]
+            else:
+                plan = self.load_json("RUP_PLAN.json")
+                if plan and "constraints" in plan:
+                    warnings.warn(
+                        "plan-state.json has no constraints; falling back to legacy "
+                        "RUP_PLAN.json constraints for run_id",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                    constraints = plan["constraints"]
         except Exception as e:
             warnings.warn(f"Could not load planning constraints for run_id: {e}", RuntimeWarning, stacklevel=2)
         return RunManifest.generate_run_id(
@@ -164,7 +185,18 @@ class StateManager:
             if not src.exists() or src.is_dir():
                 continue
             try:
-                data = safe_load_json(src)
+                # Root-level legacy artifacts are untrusted input; read them
+                # through the jailed reader so a symlinked artifact cannot pull
+                # external content into state (RUP-SEC-001).
+                if src.stat().st_size > MAX_FILE_BYTES:
+                    warnings.warn(
+                        f"Legacy artifact {name} exceeds size limit; skipping.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                    continue
+                with open_jailed_read(source_root, src, encoding="utf-8") as f:
+                    data = json.load(f)
                 if not isinstance(data, dict):
                     warnings.warn(
                         f"Legacy artifact {name} is not a JSON object; skipping.",

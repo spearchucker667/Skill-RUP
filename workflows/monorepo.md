@@ -1,11 +1,11 @@
 # Operational Workflow: Monorepo Orchestration
 
 ## Purpose
-Scoped execution across workspace packages (pnpm, nx, turborepo, cargo workspaces, go work).
+Scoped execution across workspace packages (npm/yarn/pnpm workspaces, nx, turborepo, lerna, cargo workspaces, go work) with per-package tooling and dependency-ordered execution.
 
 ## Operational Command
 ```bash
-python3 -m runtime.cli run --target <dir>
+python3 -m runtime.cli run --target <dir> --changed-packages
 ```
 
 ## Canonical Rules & Process
@@ -13,8 +13,9 @@ Follow canonical RUP directives for this workflow.
 
 ## Raw Protocol Data
 ```yaml
-description: Scoped execution across workspace packages (pnpm, nx, turborepo, cargo workspaces, go work).
-cli_command: python3 -m runtime.cli run --target <dir>
+description: Scoped execution across workspace packages (npm/yarn/pnpm workspaces, nx, turborepo, lerna, cargo workspaces,
+  go work) with per-package tooling and dependency-ordered execution.
+cli_command: python3 -m runtime.cli run --target <dir> --changed-packages
 ```
 
 ## Validation

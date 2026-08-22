@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from collections import defaultdict
 from .command_runner import run_command
+from .security import iter_jailed_files, read_jailed_text
 
 EXT_TO_LANG = {
     '.py': 'python',
@@ -78,12 +79,9 @@ class InventoryManager:
         self._cached_inventory: Optional[Dict[str, Any]] = None
 
     def _walk_files(self):
-        """Walks files ignoring standard ignore directories."""
+        """Walks files ignoring standard ignore directories (RUP-SEC-001 jailed)."""
         ignored = {'.git', '.venv', 'venv', 'env', 'node_modules', '__pycache__', 'dist', 'build', '.rup', '.reference', '.pytest_cache'}
-        for root, dirs, files in os.walk(self.target_dir):
-            dirs[:] = [d for d in dirs if d not in ignored]
-            for file in sorted(files):
-                yield Path(root) / file
+        yield from iter_jailed_files(self.target_dir, skip_dirnames=ignored)
 
     def analyze_inventory(self) -> Dict[str, Any]:
         """Perform a single comprehensive pass over the repository."""
@@ -100,8 +98,12 @@ class InventoryManager:
             ext = file_path.suffix.lower()
             lang = EXT_TO_LANG.get(ext)
 
-            if file_path.stat().st_size > 2 * 1024 * 1024:
-                continue  # Skip large data/binary files from LOC
+            try:
+                if file_path.stat().st_size > 2 * 1024 * 1024:
+                    continue  # Skip large data/binary files from LOC
+            except OSError as e:
+                warnings.warn(f"Inventory stat failed for {file_path}: {e}", RuntimeWarning, stacklevel=2)
+                continue
 
             try:
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -216,7 +218,7 @@ class InventoryManager:
             p = self.target_dir / c
             if p.exists():
                 try:
-                    content = p.read_text(encoding="utf-8", errors="ignore")
+                    content = read_jailed_text(self.target_dir, p)
                     if "Apache License" in content and "2.0" in content:
                         return "Apache-2.0"
                     if "MIT License" in content or "Permission is hereby granted, free of charge" in content:
@@ -255,7 +257,7 @@ class InventoryManager:
         if pkg_json.exists():
             try:
                 import json
-                data = json.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
+                data = json.loads(read_jailed_text(self.target_dir, pkg_json))
                 if "main" in data or "module" in data or "types" in data:
                     if not (self.target_dir / "src" / "index.html").exists():
                         return "library"

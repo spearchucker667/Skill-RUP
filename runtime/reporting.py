@@ -8,7 +8,6 @@ Implements canonical Phase 4 Reporting & Handoff:
 - Rollback commands
 - Truthful publication instructions (no false PR merge claims)
 """
-import shlex
 import warnings
 from typing import Dict, Any, List, Set
 from pathlib import Path
@@ -17,6 +16,7 @@ from .artifact_builder import ArtifactBuilder
 from .command_runner import run_command
 from .discovery import DiscoveryPhase
 from .inventory import InventoryManager
+from .rollback import render_rollback_commands
 from .tool_detection import ToolDetector
 
 class ReportingPhase:
@@ -151,21 +151,48 @@ class ReportingPhase:
                     "reason": "not_selected",
                 })
 
-        # Rollback commands (quoted for hostile filenames)
-        rollback_cmds = []
-        created_files = [c["file_path"] for c in changes if c.get("change_type") == "create"]
-        modified_files = [c["file_path"] for c in changes if c.get("change_type") in ("modify", "delete", "rename")]
-
-        if modified_files:
-            rollback_cmds.append(
-                "git checkout -- " + " ".join(shlex.quote(p) for p in modified_files)
-            )
-        if created_files:
-            rollback_cmds.append(
-                "rm -f -- " + " ".join(shlex.quote(p) for p in created_files)
-            )
-        if not rollback_cmds:
+        # Rollback: consume the single platform-neutral representation produced
+        # by the execution phase (audit P1-28). execution-state.json is
+        # authoritative; RUP_EXECUTION.json rollback_procedure is the fallback;
+        # reconstructing from raw changes is the legacy path for stale artifacts
+        # and emits a deprecation warning.
+        rollback_operations: List[Dict[str, Any]] = []
+        if execution_state_valid and execution_state.get("rollback_operations"):
+            rollback_operations = execution_state["rollback_operations"]
+        elif execution_data.get("rollback_procedure", {}).get("operations"):
+            rollback_operations = execution_data["rollback_procedure"]["operations"]
+        else:
+            created_files = [c["file_path"] for c in changes if c.get("change_type") == "create"]
+            modified_files = [c["file_path"] for c in changes if c.get("change_type") in ("modify", "delete", "rename")]
+            if created_files or modified_files:
+                warnings.warn(
+                    "No structured rollback operations found; reconstructing from changes "
+                    "(legacy artifacts). Re-run execute to record authoritative rollback ops.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                rollback_operations = [
+                    *({"op": "remove_file", "path": p} for p in created_files),
+                    *({"op": "restore_content", "path": p} for p in modified_files),
+                ]
+        rollback_cmds = render_rollback_commands(rollback_operations, platform="posix")
+        if not rollback_operations:
             rollback_cmds.append("# No changes to revert")
+
+        # Monorepo aggregate (audit P1-11): per-package change rollup from the
+        # execution phase's package graph, when a workspace was detected.
+        workspace_summary = None
+        if execution_state_valid and execution_state.get("package_changes"):
+            package_changes = execution_state["package_changes"]
+            workspace_summary = {
+                "packages": {
+                    name: {
+                        "files_changed": len(files),
+                        "files": sorted(files),
+                    }
+                    for name, files in sorted(package_changes.items())
+                }
+            }
 
         branch = self._get_git_branch()
         is_ready = (
@@ -213,9 +240,16 @@ class ReportingPhase:
             ],
             "followups": followups,
             "rollback_procedure": {
+                "operations": rollback_operations,
                 "commands": rollback_cmds,
+                "by_item": (
+                    execution_state.get("rollback_by_item", {})
+                    if execution_state_valid and execution_state.get("rollback_by_item")
+                    else {}
+                ),
                 "complexity": plan_data.get("risk_analysis", {}).get("rollback_complexity", "low")
             },
+            "workspace_summary": workspace_summary,
             "handoff_instructions": handoff_instructions
         }
 

@@ -6,10 +6,46 @@ Implements canonical Phase 2 Planning:
 2.3 Work Selection (time budget, max files, risk tolerance)
 2.4 Execution Planning (dependency graph, topological sort, checkpoints, verification methods)
 """
+import warnings
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from .state import StateManager
 from .artifact_builder import ArtifactBuilder
+
+# Per-category checkpoint definitions (RUP-PLAN-004): each selected workstream
+# carries a verification method, success criteria, and per-item rollback so the
+# execution phase can enforce workstream checkpoints instead of a single global
+# verification pass (audit P1-13).
+_CHECKPOINT_METHODS: Dict[str, Dict[str, str]] = {
+    "tests": {
+        "method": "test",
+        "success_criteria": "Test suite passes with no new failures (3-run flakiness detection).",
+    },
+    "dx": {
+        "method": "lint_or_type_check",
+        "success_criteria": "Linter or type checker exits 0 with zero violations.",
+    },
+    "ci": {
+        "method": "file_validation",
+        "success_criteria": "Generated CI workflow exists and is syntactically valid YAML.",
+    },
+    "security": {
+        "method": "scan",
+        "success_criteria": "No new secrets; secret-scan coverage complete.",
+    },
+    "docs": {
+        "method": "existence",
+        "success_criteria": "Documentation file exists and is non-empty.",
+    },
+    "governance": {
+        "method": "existence",
+        "success_criteria": "Governance file exists; placeholders require manual completion.",
+    },
+    "bugs": {
+        "method": "test",
+        "success_criteria": "Failing test reproduces the bug; fix passes the test 3 times.",
+    },
+}
 
 
 class PlanningError(RuntimeError):
@@ -177,10 +213,57 @@ class PlanningPhase:
                     selected.append(item["id"])
                     break
 
+        # RUP-PLAN-003: enforce dependency closure. A selected item may only be
+        # admitted together with its mandatory dependencies (recursively); the
+        # canonical planning reference requires dependencies to execute first.
+        # If admitting a dependency would break the budget/risk boundary, the
+        # dependent item is escalated instead of executing without its deps
+        # (audit P1-12).
+        closure_admitted: List[str] = []
+        selected_set = set(selected)
+        backlog_by_id = {b["id"]: b for b in backlog}
+        queue: List[str] = list(selected)
+        while queue:
+            item_id = queue.pop(0)
+            item = backlog_by_id.get(item_id)
+            if not item:
+                continue
+            for dep_id in item.get("dependencies", []):
+                if dep_id in selected_set:
+                    continue
+                dep = backlog_by_id.get(dep_id)
+                if dep is None:
+                    warnings.warn(
+                        f"Backlog item {item_id} depends on {dep_id}, which is not in the "
+                        "backlog; treating it as an external dependency.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                    continue
+                mins = dep["estimated_effort_minutes"]
+                file_count = max(1, len(dep.get("scope", {}).get("files", [])))
+                dep_risk_rank = risk_rank.get(dep.get("risk", "low"), 0)
+                if dep["priority"] == "P0" or _fits_constraints(dep, mins, file_count, dep_risk_rank):
+                    selected_set.add(dep_id)
+                    selected.append(dep_id)
+                    allocated_minutes += mins
+                    selected_files += file_count
+                    closure_admitted.append(dep_id)
+                    queue.append(dep_id)
+                else:
+                    # The dependency cannot be admitted within the run boundary;
+                    # the dependent item must not run without it.
+                    if item_id not in escalation:
+                        escalation.append(item_id)
+                    if item_id in selected_set:
+                        selected_set.discard(item_id)
+                        selected.remove(item_id)
+
         return {
             "selected_items": selected,
             "selected_for_escalation": escalation,
             "requires_explicit_override": bool(escalation),
+            "closure_admitted": closure_admitted,
         }
 
     def _sequence_execution(self, selected_ids: List[str], backlog: List[Dict[str, Any]]) -> List[str]:
@@ -211,6 +294,26 @@ class PlanningPhase:
             visit(sid)
 
         return ordered
+
+    @staticmethod
+    def _checkpoint_for_item(item: Dict[str, Any]) -> Dict[str, Any]:
+        """Derive the checkpoint (verification method + success criteria) for one item."""
+        category = item.get("category", "")
+        title = (item.get("title") or "").lower()
+        spec = _CHECKPOINT_METHODS.get(category, {"method": "existence", "success_criteria": "Workstream artifact exists and is non-empty."})
+        method = spec["method"]
+        if category == "dx":
+            method = "type_check" if "type" in title else "lint"
+        return {
+            "backlog_item_id": item["id"],
+            "verification_method": method,
+            "success_criteria": spec["success_criteria"],
+            "rollback": "Per-item rollback operations recorded by the execution phase (restore_content / remove_file / restore_deleted / move_back).",
+        }
+
+    def _build_checkpoints(self, selected_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Build the per-workstream checkpoint graph for the selected plan (audit P1-13)."""
+        return [self._checkpoint_for_item(item) for item in selected_items]
 
     def _analyze_plan_risk(self, selected_items: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Analyze risks of planned execution."""
@@ -266,10 +369,14 @@ class PlanningPhase:
             }
         }
 
+        checkpoints = self._build_checkpoints(selected_items)
+
         plan_state = {
             "constraints": constraints,
             "selected_for_escalation": selection["selected_for_escalation"],
             "requires_explicit_override": selection["requires_explicit_override"],
+            "closure_admitted": selection.get("closure_admitted", []),
+            "checkpoints": checkpoints,
         }
 
         # Save machine-readable state atomically

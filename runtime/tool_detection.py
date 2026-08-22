@@ -7,9 +7,27 @@ import warnings
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
+from .security import read_jailed_text
+from .workspace import detect_workspace
+
 class ToolDetector:
     def __init__(self, target_dir: Path):
         self.target_dir = target_dir
+
+    def _read_root_text(self, name: str) -> Optional[str]:
+        """Read a root-level target file through the jailed reader (RUP-SEC-001).
+
+        Returns ``None`` when the file is missing, unreadable, or resolves
+        outside the target so detection degrades gracefully.
+        """
+        path = self.target_dir / name
+        if not path.exists():
+            return None
+        try:
+            return read_jailed_text(self.target_dir, path)
+        except Exception as e:
+            warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
+            return None
 
     def detect_all(self, languages: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Run all tooling detections."""
@@ -31,20 +49,18 @@ class ToolDetector:
         if (self.target_dir / "pytest.ini").exists():
             return "pytest"
         if (self.target_dir / "pyproject.toml").exists():
-            try:
-                content = (self.target_dir / "pyproject.toml").read_text(encoding="utf-8", errors="ignore")
-                if "tool.pytest" in content or "pytest" in content:
-                    return "pytest"
-            except Exception as e:
-                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
+            content = self._read_root_text("pyproject.toml") or ""
+            if "tool.pytest" in content or "pytest" in content:
+                return "pytest"
         if list(self.target_dir.glob("**/test_*.py")) or list(self.target_dir.glob("**/*_test.py")):
             return "pytest"
 
         # JS / TS
         pkg_json = self.target_dir / "package.json"
         if pkg_json.exists():
+            content = self._read_root_text("package.json") or "{}"
             try:
-                data = json.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
+                data = json.loads(content)
                 deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
                 scripts = data.get("scripts", {})
                 if "vitest" in deps or any("vitest" in s for s in scripts.values()):
@@ -79,14 +95,11 @@ class ToolDetector:
         if (self.target_dir / "ruff.toml").exists() or (self.target_dir / ".ruff.toml").exists():
             return "ruff"
         if (self.target_dir / "pyproject.toml").exists():
-            try:
-                content = (self.target_dir / "pyproject.toml").read_text(encoding="utf-8", errors="ignore")
-                if "tool.ruff" in content:
-                    return "ruff"
-                if "tool.flake8" in content:
-                    return "flake8"
-            except Exception as e:
-                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
+            content = self._read_root_text("pyproject.toml") or ""
+            if "tool.ruff" in content:
+                return "ruff"
+            if "tool.flake8" in content:
+                return "flake8"
         if (self.target_dir / ".flake8").exists():
             return "flake8"
 
@@ -95,8 +108,9 @@ class ToolDetector:
             return "eslint"
         pkg_json = self.target_dir / "package.json"
         if pkg_json.exists():
+            content = self._read_root_text("package.json") or "{}"
             try:
-                data = json.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
+                data = json.loads(content)
                 deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
                 if "eslint" in deps:
                     return "eslint"
@@ -116,14 +130,11 @@ class ToolDetector:
         if (self.target_dir / ".prettierrc").exists() or list(self.target_dir.glob("prettier.config.*")):
             return "prettier"
         if (self.target_dir / "pyproject.toml").exists():
-            try:
-                c = (self.target_dir / "pyproject.toml").read_text(encoding="utf-8", errors="ignore")
-                if "tool.black" in c:
-                    return "black"
-                if "tool.ruff" in c:
-                    return "ruff"
-            except Exception as e:
-                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
+            c = self._read_root_text("pyproject.toml") or ""
+            if "tool.black" in c:
+                return "black"
+            if "tool.ruff" in c:
+                return "ruff"
         return None
 
     def detect_type_checker(self) -> Optional[str]:
@@ -133,14 +144,11 @@ class ToolDetector:
         if (self.target_dir / "mypy.ini").exists() or (self.target_dir / ".mypy.ini").exists():
             return "mypy"
         if (self.target_dir / "pyproject.toml").exists():
-            try:
-                c = (self.target_dir / "pyproject.toml").read_text(encoding="utf-8", errors="ignore")
-                if "tool.pyright" in c:
-                    return "pyright"
-                if "tool.mypy" in c:
-                    return "mypy"
-            except Exception as e:
-                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
+            c = self._read_root_text("pyproject.toml") or ""
+            if "tool.pyright" in c:
+                return "pyright"
+            if "tool.mypy" in c:
+                return "mypy"
         return None
 
     def detect_ci_platform(self) -> Optional[str]:
@@ -181,45 +189,42 @@ class ToolDetector:
         return ",".join(tools) if tools else None
 
     def detect_monorepo(self) -> Dict[str, Any]:
-        """Detect monorepo tooling and structure."""
-        is_mono = False
-        kind = None
-        packages = []
+        """Detect monorepo tooling and structure (canonical shape, audit P1-11).
 
-        if (self.target_dir / "pnpm-workspace.yaml").exists():
-            is_mono = True
-            kind = "pnpm-workspace"
-        elif (self.target_dir / "lerna.json").exists():
-            is_mono = True
-            kind = "lerna"
-        elif (self.target_dir / "turbo.json").exists():
-            is_mono = True
-            kind = "turborepo"
-        elif (self.target_dir / "nx.json").exists():
-            is_mono = True
-            kind = "nx"
-        elif (self.target_dir / "go.work").exists():
-            is_mono = True
-            kind = "go-work"
-        elif (self.target_dir / "Cargo.toml").exists():
-            try:
-                c = (self.target_dir / "Cargo.toml").read_text(encoding="utf-8", errors="ignore")
-                if "[workspace]" in c:
-                    is_mono = True
-                    kind = "cargo-workspace"
-            except Exception as e:
-                warnings.warn(f"Tool detection warning: {e}", RuntimeWarning, stacklevel=2)
+        Uses the workspace package graph from :mod:`runtime.workspace`; falls
+        back to a directory heuristic for repos without a workspace manifest.
+        """
+        ws = detect_workspace(self.target_dir)
+        if ws is not None:
+            return {
+                "is_monorepo": True,
+                "tool": ws["tool"],
+                "packages": [
+                    {
+                        "name": p["name"],
+                        "path": p["path"],
+                        "language": p["language"],
+                        "type": p["type"],
+                    }
+                    for p in ws["packages"]
+                ],
+            }
 
+        # Fallback heuristic: a packages/ directory without a workspace manifest.
         pkg_dir = self.target_dir / "packages"
         if pkg_dir.is_dir():
-            is_mono = True
             packages = [p.name for p in pkg_dir.iterdir() if p.is_dir()]
+            if packages:
+                return {
+                    "is_monorepo": True,
+                    "tool": "custom",
+                    "packages": [
+                        {"name": name, "path": f"packages/{name}", "language": "unknown", "type": "lib"}
+                        for name in packages
+                    ],
+                }
 
-        return {
-            "is_monorepo": is_mono,
-            "type": kind,
-            "packages": packages
-        }
+        return {"is_monorepo": False, "tool": "none", "packages": []}
 
     def detect_build_tool(self) -> Optional[str]:
         """Detect package / build tools."""

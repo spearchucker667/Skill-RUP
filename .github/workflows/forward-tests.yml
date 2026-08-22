@@ -44,3 +44,8 @@ jobs:
           pip install -r requirements-ci.txt
       - name: Run minimal Windows forward fixture
         run: python scripts/forward_test.py --fixtures tests/fixtures --only python_ok
+      - name: Run Windows rollback + workspace coverage
+        run: |
+          python -m pytest tests/forward/test_execute.py -q -k rollback
+          python -m pytest tests/test_workspace.py tests/test_tool_resolution.py -q
+          python scripts/forward_test.py --fixtures tests/fixtures --only workspace

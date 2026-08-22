@@ -13,18 +13,23 @@ class RupPaths:
         if not self.target_dir.is_dir():
             raise NotADirectoryError(f"Target directory not found: {self.target_dir}")
 
+        # Custom and default state directories must resolve inside the target
+        # repository. In particular the default ``<target>/.rup`` must not be a
+        # pre-existing symlink pointing outside the target: resolving it here and
+        # verifying containment prevents state/artifact writes from being
+        # redirected outside the repository (RUP-SEC-001 write side).
         if state_dir is not None:
-            resolved_state = state_dir.resolve()
-            # Custom state directories must remain inside the target repository.
-            try:
-                resolved_state.relative_to(self.target_dir)
-            except ValueError:
-                raise PermissionError(
-                    f"State directory must resolve inside the target repository: {resolved_state}"
-                )
-            self.state_dir = resolved_state
+            candidate = state_dir
         else:
-            self.state_dir = self.target_dir / ".rup"
+            candidate = self.target_dir / ".rup"
+        resolved_state = candidate.resolve()
+        try:
+            resolved_state.relative_to(self.target_dir)
+        except ValueError:
+            raise PermissionError(
+                f"State directory must resolve inside the target repository: {resolved_state}"
+            )
+        self.state_dir = resolved_state
 
     def get_skill_path(self, *subpaths) -> Path:
         """Resolve a path within the skill's own directory (e.g. protocol/)."""
@@ -38,9 +43,18 @@ class RupPaths:
 
     def get_state_path(self, *subpaths) -> Path:
         """Resolve a path within the controlled state directory (.rup/)."""
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-        target = self.state_dir.joinpath(*subpaths)
-        return enforce_path_jail(self.state_dir, target)
+        # Re-verify the state root on every access so a symlink swap of .rup/
+        # after initialization cannot redirect state writes outside the target.
+        resolved_state = self.state_dir.resolve()
+        try:
+            resolved_state.relative_to(self.target_dir)
+        except ValueError:
+            raise PermissionError(
+                f"State directory escaped the target repository: {resolved_state}"
+            )
+        resolved_state.mkdir(parents=True, exist_ok=True)
+        target = resolved_state.joinpath(*subpaths)
+        return enforce_path_jail(resolved_state, target)
         
     @property
     def protocol_dir(self) -> Path:

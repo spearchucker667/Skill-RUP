@@ -21,10 +21,19 @@ from typing import Any, Dict, List, Optional, Tuple
 from .artifact_builder import ArtifactBuilder
 from .command_runner import run_command
 from .inventory import InventoryManager
-from .redaction import scan_file_for_secrets
-from .security import scan_content_for_threats
+from .redaction import scan_file_for_secrets_status
+from .security import (
+    execution_gate_status,
+    iter_jailed_files,
+    jailed_unlink,
+    open_jailed_read,
+    read_jailed_text,
+    scan_content_for_threats,
+)
 from .state import StateManager
 from .tool_detection import ToolDetector
+from .tool_resolution import resolve_js_tool
+from .workspace import changed_packages, detect_workspace
 
 
 class VerificationPhase:
@@ -34,12 +43,37 @@ class VerificationPhase:
         state_manager: StateManager,
         artifact_builder: ArtifactBuilder,
         strict: bool = False,
+        allow_exec: bool = False,
+        sandbox: str = "off",
+        workspace: Optional[str] = None,
+        changed_only: bool = False,
     ):
         self.target_dir = target_dir
         self.state_manager = state_manager
         self.artifact_builder = artifact_builder
         self.strict = strict
-        self._tools = ToolDetector(target_dir).detect_all()
+        self.allow_exec = allow_exec
+        self.sandbox = sandbox
+        # Monorepo scoping (audit P1-11): when a package is selected, executable
+        # gates (tests/lint/type/build) run from the package directory with the
+        # package's own toolchain; security walks remain repository-wide.
+        self._gate_cwd = target_dir
+        if workspace or changed_only:
+            ws = detect_workspace(target_dir)
+            if ws is not None:
+                if changed_only:
+                    names = changed_packages(target_dir, ws)
+                    scoped = names if names and names != ["all"] else []
+                else:
+                    scoped = [workspace] if workspace in {p["name"] for p in ws["packages"]} else []
+                if scoped:
+                    pkg_dir = next(
+                        (target_dir / p["path"] for p in ws["packages"] if p["name"] in scoped),
+                        target_dir,
+                    )
+                    self._gate_cwd = pkg_dir
+                    self.workspace_scope = sorted(scoped)
+        self._tools = ToolDetector(self._gate_cwd).detect_all()
         self._primary_language = InventoryManager(target_dir).analyze_inventory().get(
             "primary_language", "unknown"
         )
@@ -64,29 +98,32 @@ class VerificationPhase:
         return rc == 0
 
     def _project_files(self):
-        """Yield project files, skipping well-known dependency/build/vcs dirs."""
+        """Yield project files, skipping well-known dependency/build/vcs dirs.
+
+        Uses the jailed walker (RUP-SEC-001) so repository file symlinks can
+        never pull external content into scanning.
+        """
         if not self._is_dir():
             return
         skip_parts = {
             ".git", ".venv", "venv", "node_modules", "dist", "build", ".rup",
             "__pycache__", ".pytest_cache", ".coverage", "htmlcov", ".tox",
         }
-        for p in self.target_dir.rglob("*"):
-            if p.is_file() and not any(part in p.parts for part in skip_parts):
+        for p in iter_jailed_files(self.target_dir, skip_dirnames=skip_parts):
+            include = False
+            try:
+                include = p.stat().st_size <= 5 * 1024 * 1024
+            except Exception:
                 include = False
-                try:
-                    include = p.stat().st_size <= 5 * 1024 * 1024
-                except Exception:
-                    include = False
-                if include:
-                    yield p
+            if include:
+                yield p
 
     def _run_tool(self, cmd: List[str], timeout: int = 300) -> Tuple[int, str, str]:
         if not cmd:
             return 127, "", "No command provided"
         if not self._tool_available(cmd[0]):
             return 127, "", f"Executable not found: {cmd[0]}"
-        return run_command(cmd, cwd=self.target_dir, timeout=timeout)
+        return run_command(cmd, cwd=self._gate_cwd, timeout=timeout)
 
     def _gate_not_run(
         self, status: str, reason: str, tool: Optional[str] = None
@@ -203,7 +240,10 @@ class VerificationPhase:
                         p = self.target_dir / fname
                         if p.is_file():
                             try:
-                                added += sum(1 for _ in p.open("r", encoding="utf-8", errors="ignore"))
+                                with open_jailed_read(
+                                    self.target_dir, p, encoding="utf-8", errors="ignore"
+                                ) as f:
+                                    added += sum(1 for _ in f)
                             except Exception as e:
                                 warnings.warn(f"Untracked file line-count failed for {p}: {e}", RuntimeWarning, stacklevel=2)
         except Exception as e:
@@ -231,16 +271,17 @@ class VerificationPhase:
             pkg_json = self.target_dir / "package.json"
             if pkg_json.exists():
                 try:
-                    data = json.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
+                    data = json.loads(read_jailed_text(self.target_dir, pkg_json))
                     if "test" in data.get("scripts", {}):
                         return [pkg_mgr, "test"]
                 except Exception as e:
                     warnings.warn(f"Could not parse package.json for test script: {e}", RuntimeWarning, stacklevel=2)
-            # No test script: drive the detected framework directly.
+            # No test script: drive the detected framework directly, offline
+            # (audit P1-18: never implicitly acquire tools over the network).
             if framework == "mocha":
-                return ["npx", "mocha"]
+                return resolve_js_tool(self._gate_cwd, "mocha")
             if framework in ("vitest", "jest"):
-                return ["npx", framework, "run"]
+                return resolve_js_tool(self._gate_cwd, framework, ["run"])
             return [pkg_mgr, "test"]
         return None
 
@@ -282,12 +323,12 @@ class VerificationPhase:
                 # Preserve any extra arguments from the detected test command.
                 extra_args = test_cmd[2:] if len(test_cmd) > 2 else []
                 cmd = [sys.executable, "-m", "coverage", "run", "--source=.", "-m", "pytest"] + extra_args
-                rc, stdout, stderr = run_command(cmd, cwd=self.target_dir, timeout=180)
+                rc, stdout, stderr = run_command(cmd, cwd=self._gate_cwd, timeout=180)
                 if rc != 0:
                     return None
                 rc2, stdout2, _ = run_command(
                     [sys.executable, "-m", "coverage", "report"],
-                    cwd=self.target_dir,
+                    cwd=self._gate_cwd,
                     timeout=60,
                 )
                 if rc2 != 0:
@@ -333,9 +374,10 @@ class VerificationPhase:
             for cov_file in self.target_dir.glob(".coverage*"):
                 if cov_file in coverage_files_before:
                     continue
-                # Best-effort cleanup of temporary coverage files.
+                # Best-effort cleanup of temporary coverage files (jailed so
+                # cleanup can never delete files outside the target).
                 try:
-                    cov_file.unlink()
+                    jailed_unlink(self.target_dir, cov_file)
                 except Exception:  # nosec B110
                     pass
 
@@ -363,7 +405,7 @@ class VerificationPhase:
 
         for _ in range(3):
             start = time.perf_counter()
-            rc, stdout, stderr = run_command(cmd, cwd=self.target_dir, timeout=120)
+            rc, stdout, stderr = run_command(cmd, cwd=self._gate_cwd, timeout=120)
             elapsed = time.perf_counter() - start
             total_duration += elapsed
             last_stdout = stdout
@@ -418,6 +460,7 @@ class VerificationPhase:
 
         return {
             "executed": True,
+            "command_succeeded": all_passed,
             "passed": max_passed if all_passed else 0,
             "failed": max_failed if not all_passed else 0,
             "skipped": max_skipped,
@@ -432,8 +475,13 @@ class VerificationPhase:
     # ------------------------------------------------------------------
     # Lint
     # ------------------------------------------------------------------
-    def _count_lint_violations(self, linter: str, cmd: List[str]) -> Tuple[int, str]:
-        """Run the linter and return a precise violation count plus raw output."""
+    def _count_lint_violations(self, linter: str, cmd: List[str]) -> Tuple[int, str, int]:
+        """Run the linter and return (violation_count, raw_output, returncode).
+
+        RUP-VERIFY-001: the return code is preserved so a failing linter with
+        empty output cannot be certified as passing. ``violations == 0`` never
+        implies command success.
+        """
         if linter == "ruff":
             # Prefer JSON output for an exact count; fall back to line counting.
             json_cmd = cmd + ["--output-format=json"]
@@ -442,14 +490,21 @@ class VerificationPhase:
             try:
                 data = json.loads(stdout)
                 if isinstance(data, list):
-                    return len(data), stdout
+                    return len(data), stdout, rc
             except Exception:  # nosec B110
                 pass
+            if stdout.strip():
+                return (
+                    len([line for line in stdout.splitlines() if line.strip()]),
+                    stdout,
+                    rc,
+                )
+            return 0, stdout, rc
 
         rc, stdout, _ = self._run_tool(cmd, timeout=120)
         if rc != 0:
-            return len([line for line in stdout.splitlines() if line.strip()]), stdout
-        return 0, stdout
+            return len([line for line in stdout.splitlines() if line.strip()]), stdout, rc
+        return 0, stdout, rc
 
     def _run_lint(self) -> Dict[str, Any]:
         linter = self._tools.get("linter")
@@ -462,7 +517,7 @@ class VerificationPhase:
         elif linter == "flake8":
             cmd = ["flake8"]
         elif linter == "eslint":
-            cmd = ["npx", "eslint", "."]
+            cmd = resolve_js_tool(self._gate_cwd, "eslint", ["."])
         elif linter == "clippy":
             cmd = ["cargo", "clippy", "--", "-D", "warnings"]
         elif linter == "golangci-lint":
@@ -471,10 +526,11 @@ class VerificationPhase:
         if cmd is None:
             return self._schema_lint_not_run("unavailable", f"Unsupported linter: {linter}", tool=linter)
 
-        violations, lint_stdout = self._count_lint_violations(linter, cmd)
+        violations, lint_stdout, rc = self._count_lint_violations(linter, cmd)
 
         return {
             "executed": True,
+            "command_succeeded": rc == 0,
             "violations_before": 0,
             "violations_after": violations,
             "auto_fixed": 0,
@@ -507,7 +563,7 @@ class VerificationPhase:
         elif build_tool in ("npm", "pnpm", "yarn"):
             pkg_json = self.target_dir / "package.json"
             try:
-                data = json.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
+                data = json.loads(read_jailed_text(self.target_dir, pkg_json))
                 scripts = data.get("scripts", {})
                 if "build" in scripts:
                     cmd = [build_tool, "run", "build"]
@@ -535,6 +591,7 @@ class VerificationPhase:
 
         return {
             "executed": True,
+            "command_succeeded": rc == 0,
             "succeeded": rc == 0,
             "warnings": self._count_build_warnings(build_tool, stdout, stderr),
             "duration_seconds": round(elapsed, 2),
@@ -551,7 +608,7 @@ class VerificationPhase:
 
         cmd: Optional[List[str]] = None
         if type_checker == "tsc":
-            cmd = ["npx", "tsc", "--noEmit"]
+            cmd = resolve_js_tool(self._gate_cwd, "tsc", ["--noEmit"])
         elif type_checker == "mypy":
             cmd = ["mypy", "."]
         elif type_checker == "pyright":
@@ -569,6 +626,7 @@ class VerificationPhase:
 
         return {
             "executed": True,
+            "command_succeeded": rc == 0,
             "passed": rc == 0,
             "errors": errors,
             "tool": type_checker,
@@ -577,18 +635,98 @@ class VerificationPhase:
     # ------------------------------------------------------------------
     # Security
     # ------------------------------------------------------------------
-    def _run_secret_scan(self) -> Dict[str, Any]:
-        findings: List[Dict[str, Any]] = []
-        for p in self._project_files():
-            hits = scan_file_for_secrets(p)
-            findings.extend(hits)
+    def _run_external_secret_scanner(self) -> Optional[Dict[str, Any]]:
+        """Run an installed external secret scanner (gitleaks / trufflehog).
 
-        return {
+        External scanners are host-controlled, read-only tooling and run before
+        the portable built-in scan; the built-in scan remains the fallback when
+        neither is installed (audit P1-21).
+        """
+        for scanner, argv in (
+            ("gitleaks", ["detect", "--no-git", "--no-banner", "--redact", "--source", "."]),
+            ("trufflehog", ["filesystem", ".", "--no-update"]),
+        ):
+            if not self._tool_available(scanner):
+                continue
+            try:
+                rc, stdout, stderr = run_command(
+                    [scanner, *argv], cwd=self.target_dir, timeout=300
+                )
+            except Exception as e:  # pragma: no cover - depends on external tool
+                return {
+                    "tool": scanner,
+                    "executed": False,
+                    "passed": None,
+                    "details": f"scan invocation failed: {e}",
+                }
+            non_empty = [line for line in stdout.splitlines() if line.strip()]
+            return {
+                "tool": scanner,
+                "executed": True,
+                "command_succeeded": rc == 0,
+                "passed": rc == 0,
+                "findings": len(non_empty) if rc != 0 else 0,
+                "details": (stdout + "\n" + stderr).strip()[:2000],
+            }
+        return None
+
+    def _run_secret_scan(self) -> Dict[str, Any]:
+        """Scan repository files with structured coverage status (audit P1-20).
+
+        A zero-finding list no longer conflates ``scanned clean`` with
+        ``not scanned (too large / error)``: the result reports per-file
+        status, and incomplete coverage is surfaced (and in strict mode fails
+        the gate) instead of looking clean. When gitleaks or trufflehog is
+        installed, its findings are merged in and the portable built-in scan
+        remains the fallback (audit P1-21).
+        """
+        findings: List[Dict[str, Any]] = []
+        files_scanned = 0
+        files_skipped = 0
+        scan_errors = 0
+        skipped_paths: List[str] = []
+
+        for p in self._project_files():
+            hits, status = scan_file_for_secrets_status(p)
+            if status == "scanned":
+                files_scanned += 1
+                findings.extend(hits)
+            elif status in ("too_large", "error"):
+                if status == "too_large":
+                    files_skipped += 1
+                else:
+                    scan_errors += 1
+                skipped_paths.append(str(p))
+            # "missing" paths are skipped silently; they contribute nothing.
+
+        complete = scan_errors == 0 and files_skipped == 0
+        if not complete:
+            warnings.warn(
+                f"Secret scan coverage incomplete: {files_skipped} file(s) too large, "
+                f"{scan_errors} scan error(s). These paths were NOT scanned.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+        result: Dict[str, Any] = {
             "executed": True,
             "passed": len(findings) == 0,
+            "complete": complete,
+            "files_scanned": files_scanned,
+            "files_skipped": files_skipped,
+            "scan_errors": scan_errors,
+            "skipped_paths": skipped_paths[:20],
             "findings": len(findings),
             "details": findings[:20],
         }
+
+        external = self._run_external_secret_scanner()
+        if external is not None:
+            result["external_scanner"] = external
+            if external.get("executed") and external.get("passed") is False:
+                result["passed"] = False
+                result["findings"] = result.get("findings", 0) + external.get("findings", 0)
+        return result
 
     def _run_prompt_injection_scan(self) -> Dict[str, Any]:
         findings: List[Dict[str, Any]] = []
@@ -697,6 +835,7 @@ class VerificationPhase:
 
         return {
             "executed": True,
+            "command_succeeded": rc == 0,
             "passed": passed and sum(counts.values()) == 0,
             "tool": tool,
             "critical": counts["critical"],
@@ -747,21 +886,22 @@ class VerificationPhase:
                 findings = 1
             return {
                 "executed": True,
+                "command_succeeded": rc == 0,
                 "passed": rc == 0 and findings == 0,
                 "findings": findings,
                 "tool": "bandit",
             }
 
         if primary in ("javascript", "typescript"):
-            pkg_json = self.target_dir / "package.json"
+            pkg_json = self._gate_cwd / "package.json"
             has_eslint_config = (
-                list(self.target_dir.glob("eslint.config.*"))
-                or list(self.target_dir.glob(".eslintrc*"))
+                list(self._gate_cwd.glob("eslint.config.*"))
+                or list(self._gate_cwd.glob(".eslintrc*"))
             )
             has_eslint_in_deps = False
             if pkg_json.exists():
                 try:
-                    data = json.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
+                    data = json.loads(read_jailed_text(self.target_dir, pkg_json))
                     deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
                     has_eslint_in_deps = "eslint" in deps
                 except Exception as e:
@@ -778,13 +918,14 @@ class VerificationPhase:
                     tool="eslint",
                 )
 
-            if not self._tool_available("npx"):
+            cmd = resolve_js_tool(self._gate_cwd, "eslint", ["."])
+            if not self._tool_available(cmd[0]):
                 return self._gate_not_run(
                     "unavailable",
-                    "npx not available to run eslint",
+                    f"ESLint not resolvable offline ({cmd[0]}); refusing network acquisition",
                     tool="eslint",
                 )
-            rc, stdout, _ = self._run_tool(["npx", "eslint", "."], timeout=180)
+            rc, stdout, _ = self._run_tool(cmd, timeout=180)
             findings = 0
             if rc != 0:
                 findings = len([line for line in stdout.splitlines() if line.strip()])
@@ -792,6 +933,7 @@ class VerificationPhase:
                 findings = 1
             return {
                 "executed": True,
+                "command_succeeded": rc == 0,
                 "passed": rc == 0 and findings == 0,
                 "findings": findings,
                 "tool": "eslint",
@@ -806,7 +948,16 @@ class VerificationPhase:
     # Status determination
     # ------------------------------------------------------------------
     def _gate_passed(self, name: str, result: Dict[str, Any]) -> bool:
+        """A gate passes only when the command succeeded AND its semantic result permits it.
+
+        RUP-VERIFY-001: an empty finding set or zero violation count never
+        implies command success. Every executable gate carries an explicit
+        ``command_succeeded`` field (returncode == 0); in-process scans carry no
+        such field and are evaluated on their ``passed`` flag alone.
+        """
         if not result.get("executed"):
+            return False
+        if result.get("command_succeeded") is False:
             return False
         if name == "tests":
             return result.get("failed", 0) == 0
@@ -814,7 +965,15 @@ class VerificationPhase:
             return result.get("violations_after", 0) == 0
         if name == "build":
             return result.get("succeeded") is True
-        # type_check and all security scanners expose an explicit `passed` field.
+        if name == "secret_scan":
+            # Fail closed on incomplete coverage in strict mode: skipped/error
+            # files must not look like a clean scan (audit P1-20).
+            if result.get("passed") is not True:
+                return False
+            if self.strict and result.get("complete") is not True:
+                return False
+            return True
+        # type_check and all remaining scanners expose an explicit `passed` field.
         return result.get("passed") is True
 
     def _determine_status(
@@ -840,6 +999,7 @@ class VerificationPhase:
         }
 
         failed_gates = []
+        blocked_gates = []
         unavailable_gates = []
         skipped_gates = []
         not_applicable_gates = []
@@ -850,7 +1010,9 @@ class VerificationPhase:
                     failed_gates.append(name)
             else:
                 status = result.get("status", "unavailable")
-                if status == "unavailable":
+                if status == "blocked":
+                    blocked_gates.append(name)
+                elif status == "unavailable":
                     unavailable_gates.append(name)
                 elif status == "skipped":
                     skipped_gates.append(name)
@@ -863,6 +1025,13 @@ class VerificationPhase:
 
         if failed_gates:
             msg = f"Gate(s) failed: {', '.join(failed_gates)}."
+            return "failed", msg, audit_entries
+
+        if blocked_gates:
+            msg = (
+                f"Gate(s) blocked by the execution trust gate: {', '.join(blocked_gates)}. "
+                f"Target-controlled commands were refused."
+            )
             return "failed", msg, audit_entries
 
         degraded = unavailable_gates + skipped_gates
@@ -906,15 +1075,34 @@ class VerificationPhase:
         if not execution_data:
             raise RuntimeError("Missing RUP_EXECUTION.json. Must run execute first.")
 
-        # Run all gates
-        tests_result = self._run_tests_with_flakiness()
-        lint_result = self._run_lint()
-        build_result = self._run_build()
-        type_check_result = self._run_type_check()
-        secret_result = self._run_secret_scan()
+        # RUP-SEC-002: the adversarial prompt-injection scan runs FIRST, before
+        # any target-controlled command. If the scan (or the sandbox policy)
+        # refuses execution, executable gates are recorded as blocked and never
+        # run. In-process scanners (secret scan) still run: they read files and
+        # execute no target code.
         prompt_injection_result = self._run_prompt_injection_scan()
-        dep_result = self._run_dependency_scan()
-        sast_result = self._run_sast_scan()
+        exec_allowed, exec_reason = execution_gate_status(
+            self.allow_exec,
+            self.sandbox,
+            prompt_injection_result.get("details", []),
+        )
+
+        if exec_allowed:
+            tests_result = self._run_tests_with_flakiness()
+            lint_result = self._run_lint()
+            build_result = self._run_build()
+            type_check_result = self._run_type_check()
+            dep_result = self._run_dependency_scan()
+            sast_result = self._run_sast_scan()
+        else:
+            reason = exec_reason or "Blocked by the execution trust gate"
+            tests_result = self._schema_test_not_run("blocked", reason)
+            lint_result = self._schema_lint_not_run("blocked", reason)
+            build_result = self._schema_build_not_run("blocked", reason)
+            type_check_result = self._schema_type_check_not_run("blocked", reason)
+            dep_result = self._gate_not_run("blocked", reason)
+            sast_result = self._gate_not_run("blocked", reason)
+        secret_result = self._run_secret_scan()
 
         overall_status, audit_msg, _ = self._determine_status(
             tests_result,
@@ -975,6 +1163,7 @@ class VerificationPhase:
                         "tests": {
                             "executed": tests_result.get("executed"),
                             "passed": tests_result.get("passed"),
+                            "command_succeeded": tests_result.get("command_succeeded"),
                             "status": tests_result.get("status"),
                             "reason": tests_result.get("reason"),
                             "tool": tests_result.get("tool"),
@@ -982,6 +1171,7 @@ class VerificationPhase:
                         "lint": {
                             "executed": lint_result.get("executed"),
                             "passed": lint_result.get("passed"),
+                            "command_succeeded": lint_result.get("command_succeeded"),
                             "status": lint_result.get("status"),
                             "reason": lint_result.get("reason"),
                             "tool": lint_result.get("tool"),
@@ -989,6 +1179,7 @@ class VerificationPhase:
                         "build": {
                             "executed": build_result.get("executed"),
                             "passed": build_result.get("passed"),
+                            "command_succeeded": build_result.get("command_succeeded"),
                             "status": build_result.get("status"),
                             "reason": build_result.get("reason"),
                             "tool": build_result.get("tool"),
@@ -996,6 +1187,7 @@ class VerificationPhase:
                         "type_check": {
                             "executed": type_check_result.get("executed"),
                             "passed": type_check_result.get("passed"),
+                            "command_succeeded": type_check_result.get("command_succeeded"),
                             "status": type_check_result.get("status"),
                             "reason": type_check_result.get("reason"),
                             "tool": type_check_result.get("tool"),
@@ -1008,6 +1200,7 @@ class VerificationPhase:
                         "dependency_scan": {
                             "executed": dep_result.get("executed"),
                             "passed": dep_result.get("passed"),
+                            "command_succeeded": dep_result.get("command_succeeded"),
                             "status": dep_result.get("status"),
                             "reason": dep_result.get("reason"),
                             "tool": dep_result.get("tool"),
@@ -1015,6 +1208,7 @@ class VerificationPhase:
                         "sast_scan": {
                             "executed": sast_result.get("executed"),
                             "passed": sast_result.get("passed"),
+                            "command_succeeded": sast_result.get("command_succeeded"),
                             "status": sast_result.get("status"),
                             "reason": sast_result.get("reason"),
                             "tool": sast_result.get("tool"),

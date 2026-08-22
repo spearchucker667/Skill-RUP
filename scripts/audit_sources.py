@@ -153,7 +153,10 @@ def main() -> int:
                 print("Warning: source-manifest.json or source-manifest.sha256 missing; skipping index consistency check", file=sys.stderr)
 
             status = "PASS" if check_ok else "FAIL"
-            print(f"[{status}] Transfer verification: {report['passed']}/{report['checked']} passed")
+            print(f"[{status}] Transfer verification: {report['passed']}/{report['checked']} source-verified, "
+                  f"{report['omitted_with_justification']} justified omissions, {report['unaccounted']} unaccounted")
+            print(f"  Breakdown: {report['exact_copies']} exact copies, {report['derived']} derived, "
+                  f"{report['translated']} translated; semantic_parity_verified={report['semantic_parity_verified']}")
             if not report["valid"]:
                 for failure in report["failures"]:
                     print(f"  - {failure['source_path']} -> {failure['destination_path']}: {failure['reason']}", file=sys.stderr)
@@ -191,7 +194,12 @@ def main() -> int:
         print(f"Updated {source_path}")
         print(f"Updated {sha_path}")
         print(
-            f"Transfer verification: {report['passed']}/{report['checked']} passed"
+            f"Transfer verification: {report['passed']}/{report['checked']} source-verified, "
+            f"{report['omitted_with_justification']} justified omissions, {report['unaccounted']} unaccounted"
+        )
+        print(
+            f"  Breakdown: {report['exact_copies']} exact copies, {report['derived']} derived, "
+            f"{report['translated']} translated; semantic_parity_verified={report['semantic_parity_verified']}"
         )
         return 0
     finally:

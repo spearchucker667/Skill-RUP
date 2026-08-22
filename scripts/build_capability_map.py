@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 
 from runtime.capability_map import (
     CANONICAL_CAPABILITIES,
-    verify_capabilities,
+    PORT_CLASSES,
     _verify_implementation,
     _determine_verification_level,
 )
@@ -113,20 +113,29 @@ def build_lineage(skill_root: Path, run_tests: bool = True) -> tuple:
                 semantic_tests,
             )
 
-        is_verified = verification_level in (
-            "structurally_verified",
-            "runtime_smoke_verified",
-            "behaviorally_verified",
-        )
-        port_status = "ported" if is_verified else "incomplete"
+        # The curated port class is authoritative; verification evidence can
+        # never upgrade it (audit P1-1/P1-2). Only a missing implementation
+        # (files/symbols) demotes a capability to "unmapped".
+        declared_class = cap.get("port_status", "agent_native")
+        if declared_class not in PORT_CLASSES:
+            declared_class = "agent_native"
+        if impl["files_exist"] and impl["symbols_verified"]:
+            port_status = declared_class
+        else:
+            port_status = "unmapped"
 
         record = {
             "id": cid,
             "category": category,
             "title": title,
             "mandatory": True,
+            "port_class": declared_class,
             "port_status": port_status,
             "verification_level": verification_level,
+            "transfer_rationale": cap.get(
+                "transfer_rationale",
+                "Canonical behavior defined in protocol/rup-protocol.yaml; downstream implementation in the listed modules.",
+            ),
             "implementation": impl_files,
             "required_symbols": req_symbols,
             "runtime_smoke_tests": runtime_smoke_tests,
@@ -140,7 +149,7 @@ def build_lineage(skill_root: Path, run_tests: bool = True) -> tuple:
         }
         lineage.append(record)
 
-        if not is_verified:
+        if port_status == "unmapped":
             failed_capabilities.append(record)
 
     return lineage, failed_capabilities
@@ -168,27 +177,32 @@ def write_artifacts(skill_root: Path, lineage: list, failed_capabilities: list) 
             f"**Canonical Source**: `{SOURCE_AUTHORITY['canonical_repo']}` "
             f"(v{SOURCE_AUTHORITY['canonical_version']} @ `{SOURCE_AUTHORITY['canonical_commit'][:8]}`)\n\n"
         )
+        by_class = {}
+        for record in lineage:
+            by_class[record["port_status"]] = by_class.get(record["port_status"], 0) + 1
+        summary = " | ".join(
+            f"**{label}**: {by_class.get(key, 0)}"
+            for label, key in (
+                ("Deterministic", "deterministic"),
+                ("Partial", "partial"),
+                ("Agent-native", "agent_native"),
+                ("Not ported", "not_ported"),
+                ("Parity verified", "parity_verified"),
+                ("Unmapped", "unmapped"),
+            )
+        )
+        f.write(f"**Total Capabilities**: {len(lineage)} | {summary}\n\n")
         f.write(
-            f"**Total Capabilities**: {len(lineage)} | "
-            f"**Ported & Verified**: {len(lineage) - len(failed_capabilities)} | "
-            f"**Incomplete**: {len(failed_capabilities)}\n\n"
+            "| Capability ID | Title | Status | Verification Level | Transfer Rationale |\n"
         )
         f.write(
-            "| Capability ID | Title | Implementation | Status | Verification Level | "
-            "Runtime Smoke Tests | Semantic Tests |\n"
-        )
-        f.write(
-            "|---------------|-------|----------------|--------|--------------------|"
-            "---------------------|----------------|\n"
+            "|---------------|-------|--------|--------------------|--------------------|\n"
         )
         for record in lineage:
-            impl_str = ", ".join(f"`{path}`" for path in record["implementation"])
-            smoke_str = ", ".join(f"`{t}`" for t in record["runtime_smoke_tests"]) if record["runtime_smoke_tests"] else "—"
-            sem_str = ", ".join(f"`{t}`" for t in record["semantic_tests"]) if record["semantic_tests"] else "—"
             f.write(
-                f"| `{record['id']}` | {record['title']} | {impl_str} | "
+                f"| `{record['id']}` | {record['title']} | "
                 f"{record['port_status'].upper()} | {record['verification_level']} | "
-                f"{smoke_str} | {sem_str} |\n"
+                f"{record['transfer_rationale']} |\n"
             )
 
 
@@ -205,13 +219,21 @@ def main():
     lineage, failed_capabilities = build_lineage(ROOT, run_tests=not args.no_tests)
     write_artifacts(ROOT, lineage, failed_capabilities)
 
+    by_class = {}
+    by_level = {}
+    for record in lineage:
+        by_class[record["port_status"]] = by_class.get(record["port_status"], 0) + 1
+        by_level[record["verification_level"]] = by_level.get(record["verification_level"], 0) + 1
+
     print(f"[RUP] Generated capability lineage for {len(lineage)} canonical capabilities.")
-    print(f"[RUP] Verified: {len(lineage) - len(failed_capabilities)} | Incomplete: {len(failed_capabilities)}")
+    print(f"[RUP] By port class: {by_class}")
+    print(f"[RUP] By verification level: {by_level}")
 
     if args.check:
         if failed_capabilities:
             print(
-                f"FAILED: {len(failed_capabilities)} capabilities failed verification:",
+                f"FAILED: {len(failed_capabilities)} capabilities have no implementation "
+                "(missing files or required symbols):",
                 file=sys.stderr,
             )
             for fc in failed_capabilities:
@@ -223,7 +245,9 @@ def main():
                 )
             return 1
         print(
-            "PASS: All canonical capabilities are structurally verified, runtime-smoke verified, or behaviorally verified."
+            "PASS: every canonical capability maps to a declared port class "
+            "(deterministic/partial/agent_native/not_ported/parity_verified) with present implementation; "
+            "NOT_PORTED capabilities are reported as NOT_PORTED, never as ported."
         )
         return 0
 

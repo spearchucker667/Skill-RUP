@@ -56,6 +56,7 @@ def _gap(
     effort: str,
     files: list,
     title: str = "",
+    dependencies: list | None = None,
 ) -> dict:
     return {
         "id": gid,
@@ -67,6 +68,7 @@ def _gap(
         "description": "",
         "impact": "",
         "suggested_fix": "",
+        "dependencies": dependencies or [],
     }
 
 
@@ -275,3 +277,68 @@ def test_dependency_cycle_raises_planning_error(tmp_path):
 
     with pytest.raises(PlanningError):
         phase.execute()
+
+
+# ---------------------------------------------------------------------------
+# Dependency closure (audit P1-12) and per-workstream checkpoints (audit P1-13)
+# ---------------------------------------------------------------------------
+
+def test_dependency_closure_admits_mandatory_dependency(tmp_path):
+    """A P0 dependency is admitted by closure even when it exceeds the budget alone."""
+    phase = _make_phase(
+        tmp_path / "closure_admit",
+        gaps=[
+            _gap("TEST-001", "critical", "tests", "large", ["tests/"], dependencies=[]),
+            _gap("CI-001", "high", "ci", "small", [".github/workflows/ci.yml"], dependencies=["TEST-001"]),
+        ],
+        time_budget=40,  # TEST-001 (45m) alone exceeds the budget; CI-001 (10m) fits.
+    )
+    data = phase.execute()
+
+    assert "TEST-001" in data["selected_items"]
+    assert "CI-001" in data["selected_items"]
+    # Dependencies execute first.
+    assert data["execution_order"].index("TEST-001") < data["execution_order"].index("CI-001")
+
+    plan_state = phase.state_manager.load_json("plan-state.json")
+    assert "TEST-001" in plan_state["closure_admitted"]
+
+
+def test_dependency_closure_escalates_dependent_when_dep_cannot_fit(tmp_path):
+    """A selected item depending on an inadmissible dependency is escalated, not run."""
+    phase = _make_phase(
+        tmp_path / "closure_escalate",
+        gaps=[
+            _gap("CI-001", "critical", "ci", "small", [".github/workflows/ci.yml"], dependencies=["TEST-001"]),
+            _gap("TEST-001", "high", "tests", "large", ["tests/"]),
+        ],
+        time_budget=20,  # CI-001 (10m) fits; TEST-001 (45m) does not.
+    )
+    data = phase.execute()
+
+    assert "CI-001" not in data["selected_items"]
+    plan_state = phase.state_manager.load_json("plan-state.json")
+    assert plan_state["selected_for_escalation"] == ["CI-001"]
+    assert plan_state["requires_explicit_override"] is True
+
+
+def test_checkpoints_emitted_per_selected_item(tmp_path):
+    """RUP-PLAN-004: planning emits a checkpoint per selected item."""
+    phase = _make_phase(
+        tmp_path / "checkpoints",
+        gaps=[
+            _gap("TEST-001", "high", "tests", "small", ["tests/"]),
+            _gap("DOCS-001", "medium", "docs", "small", ["README.md"], title="README"),
+        ],
+        time_budget=45,
+    )
+    data = phase.execute()
+    assert len(data["selected_items"]) == 2
+
+    plan_state = phase.state_manager.load_json("plan-state.json")
+    checkpoints = {c["backlog_item_id"]: c for c in plan_state["checkpoints"]}
+    assert set(checkpoints.keys()) == {"TEST-001", "DOCS-001"}
+    assert checkpoints["TEST-001"]["verification_method"] == "test"
+    assert "no new failures" in checkpoints["TEST-001"]["success_criteria"]
+    assert checkpoints["DOCS-001"]["verification_method"] == "existence"
+    assert "rollback" in checkpoints["DOCS-001"]

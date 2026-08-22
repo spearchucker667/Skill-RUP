@@ -185,6 +185,63 @@ def test_rollback_commands_quote_hostile_filenames(tmp_path):
     assert "git checkout --" in modify_cmd
 
 
+def test_reporting_consumes_execution_state_rollback_operations(tmp_path):
+    """RUP-REPORT-005: the report consumes the structured rollback operations as
+    the single source of truth instead of reconstructing from raw changes."""
+    repo = tmp_path / "rollback_sot_repo"
+    repo.mkdir()
+    paths = RupPaths(repo)
+    state = StateManager(paths)
+
+    state.save_json(
+        {
+            "repo_metadata": {"name": "test"},
+            "risk_assessment": {
+                "production_readiness_score": 60,
+                "technical_debt_score": 40,
+            },
+        },
+        "RUP_DISCOVERY.json",
+    )
+    state.save_json({"backlog": [], "selected_items": [], "risk_analysis": {}}, "RUP_PLAN.json")
+    # RUP_EXECUTION.json has conflicting raw changes; execution-state.json is
+    # authoritative and must win.
+    state.save_json(
+        {
+            "changes": [{"file_path": "WRONG.md", "change_type": "create", "rationale": "stale"}],
+            "commits": [],
+            "local_verification": {},
+        },
+        "RUP_EXECUTION.json",
+    )
+    state.save_json(
+        {
+            "rollback_operations": [
+                {"op": "remove_file", "path": "README.md", "backlog_item_id": "DOCS-001"},
+                {"op": "restore_content", "path": "src/app.py", "backlog_item_id": "FIX-002"},
+            ],
+        },
+        "execution-state.json",
+    )
+    state.save_json(
+        {"verification_results": {"overall_status": "passed"}, "metrics": {}, "audit_trail": []},
+        "RUP_VERIFICATION.json",
+    )
+
+    builder = ArtifactBuilder(paths, state=state)
+    phase = ReportingPhase(repo, StateManager(paths), builder)
+    report = phase.execute()
+
+    rb = report["rollback_procedure"]
+    assert [op["path"] for op in rb["operations"]] == ["README.md", "src/app.py"]
+    joined = "\n".join(rb["commands"])
+    assert "README.md" in joined and "src/app.py" in joined
+    assert "WRONG.md" not in joined
+    # Rendered commands are derived from the ops, not raw shell reconstruction.
+    assert any(cmd.startswith("rm -f --") for cmd in rb["commands"])
+    assert any(cmd.startswith("git checkout --") for cmd in rb["commands"])
+
+
 def test_reporting_includes_readiness_debt_deltas_and_completed_count(tmp_path):
     """RUP-REPORT-004: final metrics reflect post-execution state and true completion count."""
     repo = tmp_path / "delta_repo"

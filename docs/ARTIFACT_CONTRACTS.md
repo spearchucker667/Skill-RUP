@@ -9,6 +9,17 @@ All deterministic state is preserved in JSON format conforming to strict JSON Sc
 - `RUP_EXECUTION.json`: Output of the execution phase. Governed by `schemas/execution.schema.json`.
 - `RUP_VERIFICATION.json`: Verification and testing outcomes. Governed by `schemas/verification.schema.json`.
 
+Skill-only sidecars (not part of the canonical contract) live alongside the
+canonical artifacts and are validated against
+`schemas/rup-schema-derived.schema.json`:
+
+- `plan-state.json`: planning constraints, escalations, dependency-closure
+  admissions, and the per-workstream checkpoint graph.
+- `execution-state.json`: per-item dispositions and checkpoints, content
+  baseline (HEAD + per-path hashes), content-addressed backups, package
+  change grouping, and the single platform-neutral rollback operation list
+  consumed by both reporting and the `rollback` CLI phase.
+
 ## Human-Readable Reports
 - Markdown equivalent reports (`RUP_DISCOVERY.md`, `RUP_PLAN.md`, etc.) are synthesized from JSON state for human review.
 - These reports provide diffs, rationale, and execution context.

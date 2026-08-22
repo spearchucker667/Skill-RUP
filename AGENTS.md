@@ -54,7 +54,9 @@ runtime/                     # Deterministic execution engine
   cli.py                     # CLI entry point: python -m runtime.cli <phase>
   discovery.py               # Phase 1: inventory, tooling detection, gap analysis
   planning.py                # Phase 2: backlog, risk analysis, work selection
-  execution.py               # Phase 3: workstream remediation and change tracking
+  execution.py               # Phase 3: workstream remediation, per-item checkpoints, change tracking
+  workspace.py               # Monorepo package graph: detection, dependency order, changed packages
+  tool_resolution.py         # Offline JS tool resolution (local .bin / npm exec --offline / npx --no-install)
   verification.py            # Phase 4: multi-gate verification
   reporting.py               # Phase 5: final report and handoff
   inventory.py               # File/language inventory and metadata
@@ -94,11 +96,12 @@ The CLI triggers phases through `runtime/cli.py`. Each phase receives a `RupPath
 Discovery -> Planning -> Execution -> Verification -> Reporting
 ```
 
-- **Discovery** (`discovery`): inventories the target repo, detects tooling, evaluates gaps across quality, security, docs, governance, and CI/CD, and produces a risk score.
-- **Planning** (`plan`): turns gaps into a prioritized backlog (P0–P3), selects work within a time budget and risk tolerance, and sequences items topologically.
-- **Execution** (`execute`): applies remediation workstreams (tests, CI, docs, governance, security), captures baseline Git status, attributes net-new changes to backlog items, runs per-item local verification, and generates rollback instructions.
-- **Verification** (`verify`): runs tests (with 3-run flakiness detection), lint, build, type-check, secret scanning, prompt-injection scanning, dependency audit, and SAST.
-- **Reporting** (`report`): aggregates all phases into a final report, follow-ups, rollback commands, and a run manifest.
+- **Discovery** (`discovery`): inventories the target repo, detects tooling (including a workspace package graph for monorepos), evaluates gaps across quality, security, docs, governance, and CI/CD, and produces a risk score.
+- **Planning** (`plan`): turns gaps into a prioritized backlog (P0–P3), selects work within a time budget and risk tolerance, enforces dependency closure (a selected item admits its mandatory dependencies recursively or is escalated), sequences items topologically, and emits a per-workstream checkpoint graph (verification method + success criteria) into `plan-state.json`.
+- **Execution** (`execute`): applies remediation workstreams (tests, CI, docs, governance, security), captures a content baseline (HEAD plus per-path hashes of dirty files), refuses to mutate paths dirty at baseline, attributes net-new changes to backlog items, and records rollback as a single set of platform-neutral per-item operations (`restore_content` / `remove_file` / `restore_deleted` / `move_back`).
+- **Verification** (`verify`): runs tests (with 3-run flakiness detection), lint, build, type-check, secret scanning (structured coverage status; gitleaks/trufflehog merged when installed; fails closed on incomplete coverage in strict mode), prompt-injection scanning, dependency audit, and SAST. JS/TS tooling is resolved offline (local `node_modules/.bin`, `npm exec --offline`, `pnpm exec`, `yarn exec`, `npx --no-install`) and is never acquired over the network.
+- **Reporting** (`report`): aggregates all phases into a final report, follow-ups, rollback commands (rendered from the structured operations), and a run manifest.
+- **Rollback** (`rollback`): applies the structured rollback operations recorded by execution (the same representation the report consumes), confined to the target jail.
 
 ### State and Artifacts
 
@@ -174,6 +177,8 @@ Run a single phase against a target repository:
 python -m runtime.cli discovery --target /path/to/repo
 python -m runtime.cli plan --target /path/to/repo
 python -m runtime.cli execute --target /path/to/repo
+python -m runtime.cli execute --target /path/to/repo --workspace packages/api  # monorepo: single package
+python -m runtime.cli execute --target /path/to/repo --changed-packages     # monorepo: changed packages only
 python -m runtime.cli verify --target /path/to/repo --strict
 python -m runtime.cli report --target /path/to/repo
 ```
@@ -184,17 +189,29 @@ Run the complete lifecycle:
 python -m runtime.cli all --target /path/to/repo --time-budget 45 --max-files 20 --risk-tolerance medium
 ```
 
+Target-controlled commands (tests, build, lint, type check) are gated by an
+adversarial-content scan and a sandbox policy. The CLI defaults to
+`--sandbox required` (refuse target-controlled execution when no sandbox is
+detected); use `--sandbox off` in a trusted environment and `--allow-exec` to
+explicitly override the adversarial-content gate. Local development runs on a
+bare machine therefore need `--sandbox off`:
+
+```bash
+python -m runtime.cli all --target /path/to/repo --sandbox off
+```
+
 Migrate legacy root-level RUP artifacts into `.rup/`:
 
 ```bash
 python -m runtime.cli migrate --target /path/to/repo
+python -m runtime.cli rollback --target /path/to/repo
 ```
 
 ## Code Style Guidelines
 
 - **Python 3.11+**, typed where practical; use `pathlib.Path` for file operations.
 - **Security-first subprocess**: `command_runner.run_command` requires a list of strings and `shell=False`. Never construct shell strings from untrusted input.
-- **Path jailing**: all paths must be resolved with `RupPaths` and `enforce_path_jail`. Custom `--state-dir` must resolve inside the target.
+- **Path jailing**: all target-repository reads and writes must go through the jailed primitives in `runtime/security.py` (`iter_jailed_files`, `open_jailed_read`, `read_jailed_text`, `atomic_jailed_write`, `jailed_mkdir`, `jailed_unlink`) or `RupPaths`; never call `read_text`/`write_text` directly on target paths. Custom `--state-dir` must resolve inside the target, and the default `<target>/.rup` must not be a symlink outside it.
 - **Atomic persistence**: use `StateManager.save_json` or the tempfile + `os.replace` pattern for state writes.
 - **No fabricated results**: verification gates must actually execute before reporting pass/fail. Missing tools are reported as `unavailable`/`not_applicable`, not passed.
 - **Warnings, not silent failures**: degrade gracefully (e.g., non-git targets, malformed `package.json`) using `warnings.warn` so issues are visible.

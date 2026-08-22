@@ -8,6 +8,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -207,7 +208,72 @@ def test_verify_transfer_manifest_passes_for_exact_copies(
 
     assert report["valid"] is True
     assert report["failed"] == 0
-    assert report["passed"] == report["checked"]
+    # Omitted sources are source-verified but never count as transfer passes
+    # (audit P1-3): passed counts only files whose destination hashes matched.
+    assert report["passed"] + report["omitted_with_justification"] == report["checked"]
+    assert report["omitted_with_justification"] >= 1
+    assert report["exact_copies"] + report["derived"] == report["passed"]
+
+
+def test_omissions_never_increase_transfer_pass_count():
+    """RUP-PROV-003: a justified omission is provenance completeness, not a parity pass."""
+    # One transferred file + one omitted file.
+    with tempfile.TemporaryDirectory() as tmp:
+        skill_root = Path(tmp) / "skill"
+        upstream = Path(tmp) / "upstream"
+        skill_root.mkdir()
+        upstream.mkdir()
+        (skill_root / "protocol").mkdir()
+        (upstream / "kept.yaml").write_text("a: 1\n")
+        (upstream / "dropped.yaml").write_text("b: 2\n")
+        (skill_root / "protocol" / "kept.yaml").write_text("a: 1\n")
+        # enumerate_git_tree requires a real git repo.
+        subprocess.run(["git", "init", "--quiet", str(upstream)], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(upstream), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(upstream), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "init", "--quiet"],
+            check=True,
+            capture_output=True,
+        )
+
+        manifest = {
+            "generated_at": "2026-08-21T00:00:00Z",
+            "canonical_repository": "x",
+            "canonical_commit": "0" * 40,
+            "canonical_protocol_version": "3.0.0",
+            "files": [
+                {
+                    "source_path": "kept.yaml",
+                    "source_git_blob_sha": compute_git_blob_sha(upstream / "kept.yaml", cwd=upstream),
+                    "source_sha256": compute_sha256(upstream / "kept.yaml"),
+                    "size_bytes": 5,
+                    "destination_path": "protocol/kept.yaml",
+                },
+                {
+                    "source_path": "dropped.yaml",
+                    "source_git_blob_sha": compute_git_blob_sha(upstream / "dropped.yaml", cwd=upstream),
+                    "source_sha256": compute_sha256(upstream / "dropped.yaml"),
+                    "size_bytes": 5,
+                    "destination_path": None,
+                },
+            ],
+        }
+        transfer = build_transfer_manifest(skill_root, manifest)
+        report = verify_transfer_manifest(skill_root, transfer, upstream)
+
+        assert report["valid"] is True
+        assert report["passed"] == 1
+        assert report["omitted_with_justification"] == 1
+        assert report["checked"] == 2
+        assert report["semantic_parity_verified"] == 0
+        # The omission is classified and linked to a downstream artifact.
+        dropped = next(t for t in transfer["transfers"] if t["source_path"] == "dropped.yaml")
+        assert dropped["rationale_class"] in (
+            "irrelevant_to_skill", "represented_elsewhere", "agent_native",
+            "runtime_translated", "development_only", "superseded",
+            "intentionally_not_supported",
+        )
+        assert isinstance(dropped["implemented_in"], list)
 
 
 def test_verify_transfer_manifest_fails_on_tampered_destination(

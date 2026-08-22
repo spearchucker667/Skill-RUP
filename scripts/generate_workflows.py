@@ -34,13 +34,13 @@ OPERATIONAL_WORKFLOWS = {
     },
     "monorepo": {
         "title": "Operational Workflow: Monorepo Orchestration",
-        "purpose": "Scoped execution across workspace packages (pnpm, nx, turborepo, cargo workspaces, go work).",
-        "cli_command": "python3 -m runtime.cli run --target <dir>",
+        "purpose": "Scoped execution across workspace packages (npm/yarn/pnpm workspaces, nx, turborepo, lerna, cargo workspaces, go work) with per-package tooling and dependency-ordered execution.",
+        "cli_command": "python3 -m runtime.cli run --target <dir> --changed-packages",
     },
     "rollback": {
         "title": "Operational Workflow: Rollback & Reversion",
-        "purpose": "Deterministic reversion of executed changes using baseline git checkpoints and cleanup commands.",
-        "cli_command": "git checkout -- <modified_files> && rm -f <created_files>",
+        "purpose": "Deterministic reversion of executed changes from the structured, platform-neutral rollback operations recorded in execution-state.json (restore_content / remove_file / restore_deleted / move_back).",
+        "cli_command": "python3 -m runtime.cli rollback --target <dir>",
     },
     "handoff": {
         "title": "Operational Workflow: Session Handoff",

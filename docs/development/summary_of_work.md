@@ -1,5 +1,26 @@
 # Session Summary
 
+> **CURRENT STATUS (2026-08-22)** — This document is an append-only dated log. The
+> opening prose below is a historical summary from an earlier session and is NOT
+> the current state. For the authoritative current status see the most recent
+> dated entry at the bottom of this file, `docs/superpowers/specs/2026-08-19-skill-rup-p0-remediation-design.md`,
+> and the validation commands in `AGENTS.md`.
+>
+> **P0 (runtime) at HEAD `8431596`:** resolved (2026-08-21 pass: RUP-XFER-001,
+> RUP-VERIFY-001, RUP-SEC-001 read/write/state/packaging, RUP-SEC-002 exec gate).
+> **P1 (2026-08-22 passes):** per-workstream capability classes (never `ported`
+> for NOT_PORTED), provenance omissions reported separately with per-capability
+> rationale, escalation guard enforced by `ExecutionPhase`, transactional
+> rollback (baseline hashes, dirty-path refusal, per-item ops, `rollback` CLI),
+> dependency closure in planning, per-workstream checkpoints, secret-scan
+> structured status with strict fail-closed, monorepo workspace graph with
+> `--workspace` / `--changed-packages` scoping and per-package handler writes,
+> offline JS tool resolution (local .bin / `npm exec --offline` / `npx
+> --no-install`), external secret scanners (gitleaks/trufflehog) merged when
+> installed, and Windows CI coverage for rollback/workspace. Remaining gaps:
+> containerization/observability `not_ported`, gitleaks not yet installed in
+> CI. See the latest 2026-08-22 entries below.
+
 ## Accomplishments
 Successfully remediated the conversion of `RUP Protocol v3.0.0` into the portable, agent-native skill `Skill-RUP`. The implementation now strictly enforces real checks, removing all stubs, mocks, and fabricated data from the initial implementation.
 
@@ -1268,3 +1289,358 @@ None.
 
 ### Next Actions
 - Monitor GitHub Actions on the merged `main` to confirm the dependabot action-version bumps do not break the refactored CI topology.
+
+---
+
+## 2026-08-21 - Session: P0 Remediation (RUP-XFER-001, RUP-VERIFY-001, RUP-SEC-001, RUP-SEC-002)
+
+**Agent**: Codebuff (CLI)
+**Task**: Implement the seven release-blocking P0 findings from the 2026-08-21 source-level audit (HEAD `e45ec8b`, design spec `docs/superpowers/specs/2026-08-19-skill-rup-p0-remediation-design.md`), with regression tests, and update security/CLI documentation.
+
+### Accomplishments
+
+#### P0-1 / RUP-XFER-001 — Planning constraints propagate to Execution
+- `runtime/execution.py::execute()` now loads constraints from `plan-state.json` (authoritative) with a legacy fallback to `RUP_PLAN.json` emitting a `RuntimeWarning` deprecation notice.
+- `runtime/state.py::_generate_run_id()` reads constraints from `plan-state.json` first, falling back to `RUP_PLAN.json`.
+- Tests: `tests/test_execution.py::test_plan_state_constraints_are_authoritative`, `test_plan_state_constraints_override_legacy_plan_constraints`; `tests/test_state.py::test_run_id_incorporates_plan_state_constraints`.
+
+#### P0-2 / RUP-VERIFY-001 — Verification gates fail closed on command failure
+- Added an explicit `command_succeeded` (returncode == 0) field to lint, build, type-check, tests, dependency scan, and SAST results.
+- `_gate_passed()` now requires `command_succeeded is not False` AND the semantic metric (e.g. `violations_after == 0`); a nonzero exit with empty output can no longer certify a passing gate.
+- Audit-trail gate entries now include `command_succeeded`.
+- Tests: `test_lint_nonzero_rc_empty_stdout_fails`, `test_build_nonzero_rc_empty_stdout_fails`, `test_type_check_nonzero_rc_empty_stdout_fails`.
+
+#### P0-3/P0-4/P0-5 / RUP-SEC-001 — Symlink jail on reads, writes, and state root
+- `runtime/security.py`: new primitives `iter_jailed_files`, `open_jailed_read`, `read_jailed_text`, `atomic_jailed_write`, `jailed_mkdir`, `jailed_unlink`, and `scan_repository_for_threats`.
+- Migrated read/walk consumers: `verification._project_files` + package.json reads + untracked line counts + coverage cleanup, `inventory._walk_files` + license + package.json reads, `discovery` secret scan, `provenance.generate_source_manifest`, `tool_detection` root reads, `state.migrate_legacy_state`.
+- `runtime/execution.py`: every generated-file write (CI, README, CONTRIBUTING, CODEOWNERS, LICENSE, SECURITY.md, pytest.ini, ruff.toml, mypy.ini, eslintrc, tsconfig, tests dir, coverage cleanup) now goes through `atomic_jailed_write` / `jailed_mkdir` / `jailed_unlink`; writing through a file or parent-directory symlink raises `PermissionError`.
+- `runtime/paths.py`: the default `<target>/.rup` state root is now resolved and containment-verified at init (a pre-existing symlink pointing outside raises `PermissionError`), and `get_state_path()` re-verifies the root on every access.
+- Tests: `tests/security/test_jailed_io.py` (13 tests) covering external file/dir symlink rejection on read/write, internal symlink following with dedupe, state-dir symlink rejection, and threat-scan non-exfiltration.
+
+#### P0-6 / RUP-SEC-001 (packaging) — Release packaging rejects symlinked members
+- `scripts/package_skill.py` refuses to package any symlinked member (pre-scan before writing the archive), records `member_types` in `manifest.json`, and `--verify` rejects symlink-attribute members and non-`file` declared types.
+- Test: `test_package_rejects_symlinked_member`.
+
+#### P0-7 / RUP-SEC-002 — Adversarial scan precedes target-code execution
+- CLI: new `--allow-exec` and `--sandbox {required,preferred,off}` (default `required`) flags.
+- `run_full_lifecycle` runs `scan_repository_for_threats` immediately after Discovery and refuses to continue when adversarial content is present without `--allow-exec`.
+- `VerificationPhase.execute()` runs the prompt-injection scan FIRST; adversarial content (or a missing sandbox under `required`) turns executable gates (tests/lint/build/type-check/dependency/SAST) into explicit `status: "blocked"` results that are never run and fail the overall status. In-process scanners (secret scan) still run.
+- `ExecutionPhase` applies the same gate before baseline-coverage collection and local verification; gate outcome is persisted in `execution-state.json` as `execution_gate`.
+- `runtime/command_runner.py` now scrubs the subprocess environment to an allowlist (credentials/CI secrets dropped), bounds captured output (512 KiB default with explicit truncation marker), and redacts secrets from stdout/stderr.
+- Sandbox detection is deliberately conservative (`RUP_SANDBOXED`, container markers, bwrap/firejail on PATH).
+- Tests: `test_verification_blocks_executable_gates_without_allow_exec`, `test_execution_gate_blocks_target_tests_without_allow_exec` / `_allow_exec_runs_target_tests`, command-runner redaction/bound/scrub tests, forward fixture `adversarial_content` proving the lifecycle refuses before `RUP_EXECUTION.json` and no target test side effect occurs.
+
+#### Harness/doc updates
+- `scripts/forward_test.py` passes `--sandbox off` (trusted CI runner) and asserts refusal for the new `adversarial_content` fixture; `tests/forward/test_*.py` phase-harness calls opt out of the sandbox default explicitly.
+- `docs/development/summary_of_work.md` gained a `CURRENT STATUS` header (stale "None" blocker statements are historical) plus this entry.
+
+### Files Modified
+1. `runtime/security.py`
+2. `runtime/paths.py`
+3. `runtime/state.py`
+4. `runtime/execution.py`
+5. `runtime/verification.py`
+6. `runtime/inventory.py`
+7. `runtime/discovery.py`
+8. `runtime/provenance.py`
+9. `runtime/tool_detection.py`
+10. `runtime/command_runner.py`
+11. `runtime/cli.py`
+12. `scripts/package_skill.py`
+13. `scripts/forward_test.py`
+14. `tests/test_execution.py`
+15. `tests/test_verification.py`
+16. `tests/test_state.py`
+17. `tests/test_command_runner.py`
+18. `tests/test_package_skill.py`
+19. `tests/forward/fixtures.py`
+20. `tests/forward/test_execute.py`, `test_verify.py`, `test_report.py` (sandbox opt-out)
+21. `docs/development/summary_of_work.md` (this entry)
+
+### Files Created
+1. `tests/security/test_jailed_io.py`
+
+### Validation Results
+- `python -m compileall runtime scripts` → **passed**
+- `python -m pytest tests/ -q` → **173 passed**
+- `python scripts/forward_test.py --fixtures tests/fixtures` → **11/11 passed** (incl. new `adversarial_content`)
+- `python scripts/generate_schemas_templates.py --check` → **PASS**
+- `python scripts/generate_workflows.py --check` → **PASS**
+- `python scripts/build_capability_map.py --check` → **PASS (20/20)**
+- `python scripts/audit_sources.py --check` → **PASS (63/63)**
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` → **40/40 valid**
+- `bandit -r runtime scripts -c bandit.yaml` → **0 issues**
+
+### Open Blockers
+- None for the P0 set. P1 semantic-parity items remain: the capability map can still report `ported` for capabilities containing `NOT_PORTED` sub-handlers; `verify_transfer_manifest` counts omitted upstream sources as transfer passes; Discovery/Execution/Verification parity gaps (monorepo scoping, dependency-closure planning, checkpoint graph, transactional rollback, secret-scan structured status, `npx` offline policy) are unaddressed.
+
+### Next Actions
+- Rebuild the parity oracle (per-capability `DETERMINISTIC`/`AGENT_NATIVE`/`PARTIAL`/`NOT_PORTED` statuses) so `NOT_PORTED` can never be reported as `PORTED`.
+- Split provenance transfer accounting (omitted != passed) and add per-capability transfer rationale.
+- Fold the write-side symlink, state-dir, and packaging fixes into the RUP-SEC-001 design spec and update `docs/SECURITY_MODEL.md` / `docs/PORTABILITY.md` to match the implemented controls.
+
+## 2026-08-22 - Session: Semantic Parity, Provenance Truthfulness, Escalation Guard, Transactional Rollback
+
+Closed the four P1 items from the previous session against HEAD `8431596`.
+
+### Accomplishments
+1. **Parity oracle rebuild (audit P1-1/P1-2)** — `runtime/capability_map.py` now
+   decomposes Phase-3 execution into eight individual workstream capabilities
+   (`rup.phase_3_execution.workstreams.<name>`) instead of one dispatcher
+   capability. Each capability carries a curated `port_status` class from
+   `PORT_CLASSES` (`deterministic` / `partial` / `agent_native` / `not_ported` /
+   `parity_verified`); the declared class is authoritative and verification
+   evidence (AST symbols, semantic tests) can never upgrade it — a NOT_PORTED
+   handler is reported NOT_PORTED even when its semantic tests pass.
+   `verify_capabilities` now reports separate totals (`by_class`,
+   `by_verification_level`); `ported` counts only deterministic+parity_verified.
+   `scripts/build_capability_map.py` writes per-class breakdowns to
+   `provenance/capability-lineage.json` and `docs/CAPABILITY_MAPPING.md`;
+   `--check` fails only on unmapped capabilities (missing files/symbols).
+   Result: 27 capabilities — 14 deterministic, 10 partial, 1 agent-native,
+   2 not_ported (containerization, observability), 0 reported as "ported".
+   `schemas/capability-lineage.schema.json` enum updated.
+2. **Escalation guard enforced in ExecutionPhase (audit P1-25)** —
+   `ExecutionPhase.execute()` now raises when `plan-state.json` has
+   `requires_explicit_override` and `--override-escalation` was not passed, so
+   phase-only `rup plan; rup execute` has the same safety semantics as `rup run`.
+   `run_execute`/CLI thread the flag through. Test:
+   `test_execution_phase_enforces_escalation_guard`.
+3. **Provenance truthfulness (audit P1-3/P1-4)** — `verify_transfer_manifest` no
+   longer counts justified omissions as transfer passes. It now reports
+   `upstream_files`, `checked` (source identity), `passed` (destination hashes
+   verified), `exact_copies`/`derived`/`translated`,
+   `omitted_with_justification`, `unaccounted`, and `semantic_parity_verified`
+   (never auto-claimed). Each omission in `_OMISSION_RATIONALE` is classified
+   (`irrelevant_to_skill` / `represented_elsewhere` / `agent_native` /
+   `runtime_translated` / `development_only` / `superseded` /
+   `intentionally_not_supported`) and links to the downstream artifact(s) that
+   preserve the behavior. Result: **12/63 transferred, 51 justified omissions,
+   0 unaccounted**. `scripts/audit_sources.py` prints the breakdown.
+   Per-capability `transfer_rationale` added to the capability lineage linking
+   canonical behavior to downstream implementation.
+4. **Transactional rollback (audit P1-26/27/28/29)** —
+   - `_capture_content_baseline()` records git-ness, HEAD, and per-path SHA-256
+     hashes of every baseline-dirty path before any mutation.
+   - `_write_target` refuses baseline-dirty paths (`BaselineDirtyRefusal`) and
+     snapshots pre-write content into `.rup/backups/<sha256>` (content-addressed
+     backups).
+   - `_build_rollback` emits a single platform-neutral representation: semantic
+     ops (`restore_content` / `remove_file` / `restore_deleted` / `move_back`)
+     carrying `backlog_item_id` and baseline hashes, with per-item grouping.
+   - New `runtime/rollback.py` renders commands per platform (posix/PowerShell)
+     and applies operations safely within the jail. New `rup rollback` CLI phase
+     consumes the same operations; reporting consumes
+     `execution-state.json` `rollback_operations` as the single source of truth
+     (legacy `changes` reconstruction demoted to a warned fallback).
+   - `workflows/rollback.md` regenerated to `python3 -m runtime.cli rollback
+     --target <dir>`; `schemas/execution-state.schema.json` regenerated for the
+     new op vocabulary. New tests: dirty-path refusal, semantic/per-item ops,
+     reporting single-source-of-truth, end-to-end CLI rollback.
+
+### Files Modified
+1. `runtime/capability_map.py`, `runtime/provenance.py`, `runtime/rollback.py` (new),
+   `runtime/execution.py`, `runtime/reporting.py`, `runtime/cli.py`
+2. `scripts/build_capability_map.py`, `scripts/audit_sources.py`,
+   `scripts/generate_workflows.py`, `scripts/generate_schemas_templates.py`
+3. `schemas/capability-lineage.schema.json`, `schemas/execution-state.schema.json`
+4. `provenance/transfer-manifest.json`, `provenance/canonical-source-manifest.json`,
+   `provenance/source-manifest.json`, `provenance/source-manifest.sha256`,
+   `provenance/capability-lineage.json`, `docs/CAPABILITY_MAPPING.md`,
+   `workflows/rollback.md`
+5. `tests/test_capability_map.py`, `tests/test_provenance.py`,
+   `tests/test_execution.py`, `tests/test_reporting.py`, `tests/forward/test_execute.py`
+6. `README.md`, `AGENTS.md`, `docs/development/summary_of_work.md`
+
+### Files Created
+1. `runtime/rollback.py`
+
+### Validation Results
+- `python -m compileall runtime scripts` → **passed**
+- `python -m pytest tests/ -q` → **181 passed**
+- `python scripts/forward_test.py --fixtures tests/fixtures` → **11/11 passed**
+- `python scripts/generate_schemas_templates.py --check` → **PASS**
+- `python scripts/generate_workflows.py --check` → **PASS**
+- `python scripts/build_capability_map.py --check` → **PASS** (27 caps: 14 deterministic, 10 partial, 1 agent-native, 2 not_ported)
+- `python scripts/audit_sources.py --check` → **PASS** (12/63 transferred, 51 justified omissions, 0 unaccounted)
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` → **40/40 valid**
+- `bandit -r runtime scripts -c bandit.yaml` → **0 issues**
+
+### Open Blockers
+- None blocking. Remaining parity gaps (unaddressed): monorepo package scoping,
+  dependency-closure planning, checkpoint graph, real bug-fix/test authoring,
+  secret-scan structured status with fail-closed coverage, `npx` offline policy,
+  Windows-native rollback command verification on CI, and containerization /
+  observability remain declared `not_ported` (now surfaced honestly in the
+  capability map rather than hidden behind a dispatcher).
+
+### Next Actions
+- Implement monorepo workspace scoping (package graph, changed-package selection,
+  per-package tooling) and dependency-closure work selection.
+- Add per-item checkpoint enforcement in execution instead of the single global
+  verification pass.
+- Make secret scanning report structured status and fail closed on incomplete
+  coverage; enforce `npx --no-install`/offline tool resolution.
+- Port containerization and observability workstreams or keep them declared
+  `not_ported` with reference-only workflows.
+
+## 2026-08-22 - Session: Dependency Closure, Checkpoints, Secret-Scan Status, Monorepo Support
+
+Closed the remaining four P1/P2 parity gaps from the previous session against
+HEAD `8431596` (with the 2026-08-21 and 2026-08-22 P0/P1 passes already applied).
+
+### Accomplishments
+1. **Dependency closure in work selection (audit P1-12)** — `_select_work` in
+   `runtime/planning.py` now enforces dependency closure: after the priority
+   loop, every selected item recursively admits its mandatory dependencies
+   (P0 dependencies unconditionally; others within the budget/risk boundary).
+   A dependency that cannot be admitted escalates the *dependent* item and
+   removes it from the selected set, so a workstream never executes without its
+   dependencies. Admitted-by-closure ids are recorded in `plan-state.json`
+   (`closure_admitted`). Tests cover admit-and-order and escalate-dependent.
+2. **Per-workstream checkpoints (audit P1-13)** — planning emits a checkpoint
+   graph into `plan-state.json` (per item: `verification_method`,
+   `success_criteria`, `rollback`) derived from the item category. Execution
+   enforces each item's checkpoint after its workstream (targeted test/lint/
+   type-check gate when the trust gate allows; non-executable methods are
+   existence-validated), records `per_item_checkpoints` in `execution-state.json`,
+   and demotes an item to `PARTIAL` when its checkpoint fails. The global
+   verification pass remains as an aggregate.
+3. **Secret scanning structured status + fail-closed (audit P1-20)** —
+   `scan_file_for_secrets_status` reports per-file status (`scanned` /
+   `too_large` / `error` / `missing`); `_run_secret_scan` aggregates
+   `files_scanned`, `files_skipped`, `scan_errors`, `skipped_paths`, and
+   `complete`. Zero findings no longer implies "clean": strict mode fails the
+   security gate on incomplete coverage (`_gate_passed` requires
+   `complete` when `strict`), non-strict emits a `RuntimeWarning`. Four new
+   tests cover the closed/fail-open/full-coverage matrix.
+4. **Real monorepo support (audit P1-11)** — new `runtime/workspace.py`
+   detects the workspace package graph (npm/yarn `workspaces` globs,
+   `pnpm-workspace.yaml`, lerna, nx, turborepo, cargo `[workspace]` members,
+   `go.work`) with per-package name/path/language/type and *internal*
+   dependency edges, topological `dependency_order`, and `changed_packages`
+   from `git status --porcelain` (so untracked RUP-created files count as
+   changes). Discovery emits the canonical `monorepo` field; execution accepts
+   `--workspace NAME` and `--changed-packages` (packages run in dependency
+   order with per-package `ToolDetector`, out-of-scope items become AGENT_ONLY
+   recommendations, changes are grouped per package in `execution-state.json`);
+   verification scopes executable gates to the package dir; reporting emits a
+   `workspace_summary` per-package rollup; the generated monorepo workflow now
+   points at `--changed-packages`.
+
+### Files Modified
+1. `runtime/workspace.py` (new), `runtime/planning.py`, `runtime/execution.py`,
+   `runtime/verification.py`, `runtime/reporting.py`, `runtime/cli.py`,
+   `runtime/discovery.py`, `runtime/tool_detection.py`, `runtime/redaction.py`
+2. `scripts/generate_schemas_templates.py`, `scripts/generate_workflows.py`,
+   `scripts/forward_test.py`
+3. `schemas/execution-state.schema.json`, `schemas/plan-state.schema.json`
+   (via derived), `workflows/monorepo.md`
+4. `tests/test_workspace.py` (new), `tests/test_planning.py`,
+   `tests/test_execution.py`, `tests/test_verification.py`,
+   `tests/test_discovery_phase.py`, `tests/forward/test_execute.py`,
+   `tests/forward/test_verify.py`, `tests/forward/test_report.py`
+5. `README.md`, `AGENTS.md`, `docs/development/summary_of_work.md`
+
+### Files Created
+1. `runtime/workspace.py`
+2. `tests/test_workspace.py`
+
+### Validation Results
+- `python -m compileall runtime scripts` → **passed**
+- `python -m pytest tests/ -q` → **198 passed**
+- `python scripts/forward_test.py --fixtures tests/fixtures` → **11/11 passed**
+- `python scripts/generate_schemas_templates.py --check` → **PASS**
+- `python scripts/generate_workflows.py --check` → **PASS**
+- `python scripts/build_capability_map.py --check` → **PASS** (27 caps, 0 ported-labels)
+- `python scripts/audit_sources.py --check` → **PASS** (12/63 transferred, 51 justified omissions)
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` → **40/40 valid**
+- `bandit -r runtime scripts -c bandit.yaml` → **0 issues**
+
+### Open Blockers
+- None blocking. Still open: containerization and observability workstreams are
+  declared `not_ported` (now surfaced honestly); secret-pattern coverage is
+  below the canonical contract (external Gitleaks/TruffleHog integration not
+  yet wired); `npx` can still acquire tools over the network (offline policy not
+  enforced); per-package handlers still write repo-root-relative paths (a future
+  handler refactor could write inside the package dir); Windows-native rollback
+  command execution is verified by tests but not on Windows CI nodes for the
+  new executor.
+
+### Next Actions
+- Port containerization/observability or keep declared `not_ported`; add
+  external secret scanners and `npx --no-install`/offline tool resolution.
+- Wire per-package file-writing into execution handlers (write under the
+  package dir when `--workspace` is active).
+- Add Windows CI coverage for the `rollback` CLI phase.
+## 2026-08-22 - Session: Offline Tool Resolution, External Secret Scanners, Per-Package Writes, Windows CI
+
+Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
+
+### Accomplishments
+1. **Offline tool resolution (audit P1-18)** — new `runtime/tool_resolution.py`
+   resolves JS/TS toolchain commands with a strictly-offline preference order:
+   package-local `node_modules/.bin` shims (`.cmd` shims on Windows), then
+   `npm exec --offline` / `pnpm exec` / `yarn exec` per detected lockfile, then
+   `npx --no-install`, then a bare PATH binary. The runtime never implicitly
+   acquires tools over the network. Wired into every JS gate command in
+   `verification.py` (tests, lint, type-check, SAST-eslint — the SAST gate now
+   reports `unavailable` when eslint is not resolvable offline) and
+   `execution.py` (`_test_command`/`_lint_command`/`_type_check_command`).
+   7 unit tests cover the resolution order incl. the Windows shim path.
+2. **External secret scanners + expanded patterns (audit P1-21)** —
+   `_run_external_secret_scanner` runs gitleaks or trufflehog (host-controlled,
+   read-only) when installed and merges findings into the structured secret
+   scan; the portable built-in scanner remains the fallback. Built-in pattern
+   coverage extended with GitLab PATs, npm tokens, PyPI tokens, Stripe live
+   keys, Google API keys, and AWS session keys. Tests: external-findings fail
+   the gate, absent-scanner fallback, pattern detection.
+3. **Per-package handler writes (audit P1-11)** — `ExecutionPhase` gained a
+   `_work_dir` write root that switches to the scoped package directory when
+   `--workspace`/`--changed-packages` is active. All handlers now resolve paths
+   through `_handler_path` (existence checks, writes, mkdir, reads), and
+   recorded change paths are remapped to target-relative for attribution,
+   rollback, and package grouping. Verified by the workspace scoping test:
+   README remediation lands at `packages/a/README.md` and
+   `package_changes == {"a": ["packages/a/README.md"]}`.
+4. **Windows CI coverage** — the full pytest matrix already runs on Windows;
+   the `forward-tests.yml` `windows-smoke` job now additionally runs the
+   rollback CLI forward test (`-k rollback`), the workspace/tool-resolution unit
+   tests, and a new `workspace` forward fixture through the real CLI lifecycle.
+
+### Files Modified
+1. `runtime/tool_resolution.py` (new), `runtime/verification.py`,
+   `runtime/execution.py`, `runtime/redaction.py`
+2. `tests/test_tool_resolution.py` (new), `tests/test_verification.py`,
+   `tests/test_execution.py`, `tests/test_security_scanning.py`,
+   `tests/forward/fixtures.py`
+3. `.github/workflows/forward-tests.yml`
+4. `README.md`, `AGENTS.md`, `docs/development/summary_of_work.md`
+
+### Files Created
+1. `runtime/tool_resolution.py`
+2. `tests/test_tool_resolution.py`
+
+### Validation Results
+- `python -m compileall runtime scripts` → **passed**
+- `python -m pytest tests/ -q` → **208 passed**
+- `python scripts/forward_test.py --fixtures tests/fixtures` → **12/12 passed** (new `workspace` fixture)
+- `python scripts/generate_schemas_templates.py --check` → **PASS**
+- `python scripts/generate_workflows.py --check` → **PASS**
+- `python scripts/build_capability_map.py --check` → **PASS**
+- `python scripts/audit_sources.py --check` → **PASS**
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` → **40/40 valid**
+- `bandit -r runtime scripts -c bandit.yaml` → **0 issues**
+- `actionlint` not installed locally; CI will lint the modified workflow.
+
+### Open Blockers
+- None blocking. Remaining: containerization/observability still declared
+  `not_ported`; external secret scanners only run when installed (CI does not
+  install gitleaks/trufflehog yet); per-package writes are covered by unit +
+  forward tests but Windows CI results await a CI run.
+
+### Next Actions
+- Install gitleaks in CI (or a dedicated job) to exercise the external-scanner
+  merge path on every push.
+- Port containerization/observability workstreams or keep them declared
+  `not_ported` with reference-only workflows.

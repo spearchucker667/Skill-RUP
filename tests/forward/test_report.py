@@ -9,11 +9,12 @@ def test_report_execution(tmp_path):
     repo_dir.mkdir()
     (repo_dir / "main.py").write_text("print('hello')")
     
-    # Run the full sequence
+    # Run the full sequence. These harness runs opt out of the --sandbox
+    # required default: the CI runner is a trusted environment.
     run_discovery(repo_dir)
     run_plan(repo_dir)
-    run_execute(repo_dir)
-    run_verify(repo_dir)
+    run_execute(repo_dir, sandbox="off", override_escalation=True)
+    run_verify(repo_dir, sandbox="off")
     run_report(repo_dir)
     
     assert (repo_dir / ".rup" / "RUP_FINAL_REPORT.json").exists()

@@ -48,24 +48,136 @@
         "type": "string"
       }
     },
+    "per_item_checkpoints": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "not_applicable",
+              "skipped"
+            ]
+          },
+          "passed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "tool": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "details": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "status"
+        ]
+      }
+    },
+    "package_changes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "scoped_workspace": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "tool": {
+          "type": "string"
+        },
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "properties": {
+        "is_git": {
+          "type": "boolean"
+        },
+        "head": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "type": "object"
+        }
+      }
+    },
+    "backups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "rollback_operations": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "op": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "restore_content",
+              "remove_file",
+              "restore_deleted",
+              "move_back",
+              "none"
+            ]
           },
-          "argv": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "old_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "backlog_item_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "backup_sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
-          "op",
-          "argv"
+          "op"
         ]
       }
     }

@@ -2623,6 +2623,36 @@
         },
         "requires_explicit_override": {
           "type": "boolean"
+        },
+        "closure_admitted": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "checkpoints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "backlog_item_id": {
+                "type": "string"
+              },
+              "verification_method": {
+                "type": "string"
+              },
+              "success_criteria": {
+                "type": "string"
+              },
+              "rollback": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "backlog_item_id",
+              "verification_method"
+            ]
+          }
         }
       },
       "additionalProperties": false

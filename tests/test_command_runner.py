@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 
@@ -54,3 +55,46 @@ def test_invalid_command_type(tmp_path):
 def test_invalid_argument_type(tmp_path):
     with pytest.raises(TypeError):
         run_command(["echo", 123], cwd=tmp_path)
+
+
+def test_output_secrets_redacted(tmp_path):
+    """RUP-SEC-002: captured command output must be secret-redacted by default."""
+    rc, stdout, stderr = run_command(
+        ["python", "-c", "print('AKIAIOSFODNN7EXAMPLE')"],
+        cwd=tmp_path,
+    )
+    assert rc == 0
+    assert "AKIAIOSFODNN7EXAMPLE" not in stdout
+    assert "[REDACTED]" in stdout
+
+
+def test_output_bounded(tmp_path):
+    """RUP-SEC-002: captured output must be bounded with an explicit marker."""
+    code = "import sys; sys.stdout.write('x' * 2000000)"
+    rc, stdout, stderr = run_command(
+        ["python", "-c", code],
+        cwd=tmp_path,
+        max_output_bytes=1024,
+    )
+    assert rc == 0
+    assert "truncated" in stdout
+    assert len(stdout) < 4000
+
+
+def test_environment_scrubbed(tmp_path):
+    """RUP-SEC-002: target-controlled commands must not inherit host secrets."""
+    code = "import os; print(os.environ.get('MY_TOP_SECRET', 'ABSENT'))"
+    env = {"PATH": os.environ.get("PATH", ""), "MY_TOP_SECRET": "hunter2"}
+    rc, stdout, stderr = run_command(["python", "-c", code], cwd=tmp_path, env=env)
+    assert rc == 0
+    assert "ABSENT" in stdout
+
+
+def test_environment_preserved_when_scrub_disabled(tmp_path):
+    code = "import os; print(os.environ.get('MY_TEST_FLAG', 'ABSENT'))"
+    env = {"PATH": os.environ.get("PATH", ""), "MY_TEST_FLAG": "set"}
+    rc, stdout, stderr = run_command(
+        ["python", "-c", code], cwd=tmp_path, env=env, scrub_env=False
+    )
+    assert rc == 0
+    assert "set" in stdout

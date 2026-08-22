@@ -18,11 +18,24 @@
       "mandatory": {
         "type": "boolean"
       },
+      "port_class": {
+        "type": "string",
+        "enum": [
+          "deterministic",
+          "partial",
+          "agent_native",
+          "not_ported",
+          "parity_verified"
+        ]
+      },
       "port_status": {
         "type": "string",
         "enum": [
-          "ported",
-          "incomplete",
+          "deterministic",
+          "partial",
+          "agent_native",
+          "not_ported",
+          "parity_verified",
           "unmapped"
         ]
       },
