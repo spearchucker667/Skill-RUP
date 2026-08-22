@@ -21,9 +21,18 @@ jobs:
 
     env:
       TAG_NAME: ${{ github.ref_name }}
+      RUP_UPSTREAM_DIR: ${{ github.workspace }}/.reference/rup-protocol-ci
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Check out pinned canonical protocol
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: spearchucker667/RUP-Protocol
+          ref: c3d6f70375db15d53db2fba76d70b5b7c9cf98bb
+          path: .reference/rup-protocol-ci
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
@@ -43,7 +52,7 @@ jobs:
           python scripts/generate_schemas_templates.py --check
           python scripts/generate_workflows.py --check
           python scripts/build_capability_map.py --check
-          python scripts/audit_sources.py --check
+          python scripts/audit_sources.py --check --upstream-dir "$RUP_UPSTREAM_DIR"
           python scripts/validate_rup.py --schema protocol/rup-schema.json all .
           git diff --exit-code
 

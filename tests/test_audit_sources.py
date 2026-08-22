@@ -1,4 +1,5 @@
 """Tests for the provenance audit script."""
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -8,8 +9,13 @@ import pytest
 SCRIPT = Path(__file__).parent.parent / "scripts" / "audit_sources.py"
 ROOT = Path(__file__).parent.parent
 
+pytestmark = pytest.mark.online
+
 
 def _run(args):
+    upstream_dir = os.environ.get("RUP_TEST_UPSTREAM_DIR")
+    if upstream_dir:
+        args = [*args, "--upstream-dir", upstream_dir]
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         capture_output=True,

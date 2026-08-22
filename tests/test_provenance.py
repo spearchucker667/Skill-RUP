@@ -6,6 +6,7 @@ repositories that act as the canonical upstream source.
 """
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -367,11 +368,16 @@ def test_clone_upstream_commit_clones_and_checks_out_commit(
     assert cloned_head.strip() == commit
 
 
+@pytest.mark.online
 def test_audit_sources_check_mode():
     """Smoke-test the audit_sources.py --check mode against the real manifests."""
     script = ROOT / "scripts" / "audit_sources.py"
+    args = [sys.executable, str(script), "--check"]
+    upstream_dir = os.environ.get("RUP_TEST_UPSTREAM_DIR")
+    if upstream_dir:
+        args.extend(["--upstream-dir", upstream_dir])
     result = subprocess.run(
-        [sys.executable, str(script), "--check"],
+        args,
         cwd=ROOT,
         capture_output=True,
         text=True,

@@ -2106,3 +2106,70 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
   runner with the native CLI and isolated backend.
 - Once CI is green for a stable HEAD, consider re-enabling
   `cancel-in-progress: true`.
+
+## 2026-08-22 - Session: Workflow reliability and IaC gate isolation
+
+### Accomplishments
+- **Reconciled failures against hosted evidence**: inspected GitHub Actions runs
+  `32564545989` (CI) and `32564545921` (Forward Tests) for `bc568b6` rather
+  than inferring failure causes from YAML alone.
+- **Hermetic OS test matrix**: registered an `online` pytest marker and changed
+  the Ubuntu/macOS/Windows matrix to run `-m "not online"`. The network-bound
+  provenance checks now run once in `integrity` against an explicit checkout of
+  canonical RUP-Protocol commit
+  `c3d6f70375db15d53db2fba76d70b5b7c9cf98bb`.
+- **Deterministic provenance source**: taught the provenance subprocess tests to
+  consume `RUP_TEST_UPSTREAM_DIR`, avoiding four independent clones during the
+  integrity job. The release workflow now uses the same pinned checkout and
+  passes it to `audit_sources.py --upstream-dir`.
+- **Host-tool-independent forward tests**: generic forward fixtures no longer
+  change expectations merely because a GitHub-hosted image happens to include
+  Pulumi or Terraform. Added `--require-iac-success` for callers that explicitly
+  install and configure real IaC tools, plus regression coverage for both
+  generic and strict modes.
+- **IaC-specific CI assertions**: Terraform and Pulumi validation jobs now
+  decide success from their canonical `iac_scan` / `pulumi_preview` operations
+  and independent native-tool oracles, instead of rejecting the aggregate RUP
+  status before inspecting the gate the job exists to prove. Failure paths now
+  emit captured lifecycle diagnostics.
+- **Workflow policy verification**: retained minimal permissions and immutable
+  full-commit action pins; checked the edited workflows against current GitHub
+  workflow syntax and secure-use guidance.
+
+### Validation Results
+- `python -m compileall runtime scripts` — PASS.
+- `python -m pytest tests/ -q` — **228 passed**, 23 expected warnings.
+- `python -m pytest tests/ -q -m "not online"` — **224 passed, 4 deselected**,
+  23 expected warnings.
+- `RUP_TEST_UPSTREAM_DIR=<pinned checkout> python -m pytest
+  tests/test_audit_sources.py
+  tests/test_provenance.py::test_audit_sources_check_mode -q` — **4 passed**.
+- `python scripts/forward_test.py --fixtures tests/fixtures` — **14/14 passed**.
+- `python scripts/generate_schemas_templates.py --check` — PASS (10 schemas).
+- `python scripts/generate_workflows.py --check` — PASS (18 workflows).
+- `python scripts/build_capability_map.py --check` — PASS (27 capabilities;
+  18 runtime-smoke verified, 9 behaviorally verified).
+- `python scripts/audit_sources.py --check` — PASS (12 exact copies and 51
+  justified omissions across 63 upstream paths).
+- `python scripts/audit_sources.py --check --upstream-dir <pinned checkout>` —
+  PASS with the same 63-path result.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` —
+  **40/40 valid**.
+- `bandit -r runtime scripts -c bandit.yaml` — PASS, 0 issues.
+- `python scripts/package_skill.py --version 3.0.2 --output
+  dist/rup-skill-v3.0.2.zip` followed by `--verify` — PASS, 370 packaged file
+  hashes verified. The validation build was not retained because v3.0.2 is an
+  existing immutable release artifact.
+- `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color` — PASS.
+- PyYAML parse of every `.github/workflows/*.yml` file — PASS (5 workflows).
+
+### Open Blockers
+- Hosted Terraform and Pulumi execution cannot be proven on this macOS host
+  because those CLIs are not installed locally. The next push must confirm the
+  configured native-tool paths on GitHub-hosted Ubuntu.
+
+### Next Actions
+- Commit and push the validated change on local `main`.
+- Confirm CI, Forward Tests, Validate Skill, and Security Scan at the exact
+  pushed SHA. If the stable CI run is green, restore `ci.yml`
+  `cancel-in-progress: true` in a follow-up commit and revalidate.

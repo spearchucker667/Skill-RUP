@@ -162,7 +162,12 @@ def check_manifest_artifacts(target_dir: Path) -> List[str]:
     return errors
 
 
-def check_fixture_specific(target_dir: Path, fixture_name: str) -> List[str]:
+def check_fixture_specific(
+    target_dir: Path,
+    fixture_name: str,
+    *,
+    require_iac_success: bool = False,
+) -> List[str]:
     errors = []
     state_dir = target_dir / ".rup"
 
@@ -251,9 +256,11 @@ def check_fixture_specific(target_dir: Path, fixture_name: str) -> List[str]:
         else:
             errors.append("ops_workstreams fixture: terraform/main.tf was not generated")
 
-        # Pin the end-to-end IaC proof: when terraform is on PATH, the iac_scan
-        # gate must have run and passed against the generated baseline.
-        if shutil.which("terraform") is not None:
+        # Generic forward tests only verify that the operation is represented
+        # honestly. GitHub-hosted images can add/remove preinstalled IaC tools,
+        # and an unconfigured tool on PATH must not change this fixture's
+        # expected result. Dedicated CI jobs opt into the real-tool assertion.
+        if require_iac_success:
             verification = json.loads(
                 (state_dir / "RUP_VERIFICATION.json").read_text(encoding="utf-8")
             )
@@ -271,12 +278,12 @@ def check_fixture_specific(target_dir: Path, fixture_name: str) -> List[str]:
         operations = iac.get("operations", {}) or {}
         if "pulumi_preview" not in operations:
             errors.append("pulumi_project fixture: iac_scan missing pulumi_preview operation")
-        if shutil.which("pulumi") is not None:
+        if require_iac_success:
             if iac.get("passed") is not True:
                 errors.append(
                     f"pulumi_project fixture: iac_scan should pass with pulumi on PATH, got {iac}"
                 )
-        else:
+        elif shutil.which("pulumi") is None:
             if operations.get("pulumi_preview", {}).get("status") != "unavailable":
                 errors.append(
                     "pulumi_project fixture: pulumi_preview should report unavailable without pulumi"
@@ -285,7 +292,12 @@ def check_fixture_specific(target_dir: Path, fixture_name: str) -> List[str]:
     return errors
 
 
-def run_fixture(fixture_name: str, fixtures_base: Path) -> Tuple[bool, List[str]]:
+def run_fixture(
+    fixture_name: str,
+    fixtures_base: Path,
+    *,
+    require_iac_success: bool = False,
+) -> Tuple[bool, List[str]]:
     errors: List[str] = []
     target_dir = Path(tempfile.mkdtemp(prefix=f"rup_fwd_{fixture_name}_", dir=str(fixtures_base)))
 
@@ -346,7 +358,13 @@ def run_fixture(fixture_name: str, fixtures_base: Path) -> Tuple[bool, List[str]
                 if not errors:
                     errors.extend(check_run_identity(target_dir))
                     errors.extend(check_manifest_artifacts(target_dir))
-                errors.extend(check_fixture_specific(target_dir, fixture_name))
+                errors.extend(
+                    check_fixture_specific(
+                        target_dir,
+                        fixture_name,
+                        require_iac_success=require_iac_success,
+                    )
+                )
             return (not errors), errors
 
         # The CLI now returns 0 only when verification passes *and* the final
@@ -379,7 +397,13 @@ def run_fixture(fixture_name: str, fixtures_base: Path) -> Tuple[bool, List[str]
         if not errors:
             errors.extend(check_run_identity(target_dir))
             errors.extend(check_manifest_artifacts(target_dir))
-            errors.extend(check_fixture_specific(target_dir, fixture_name))
+            errors.extend(
+                check_fixture_specific(
+                    target_dir,
+                    fixture_name,
+                    require_iac_success=require_iac_success,
+                )
+            )
 
         return (not errors), errors
     finally:
@@ -399,6 +423,14 @@ def main() -> int:
         default=None,
         help="Run only the named fixture (may be given multiple times)",
     )
+    parser.add_argument(
+        "--require-iac-success",
+        action="store_true",
+        help=(
+            "Require configured Terraform/Pulumi operations to pass. Use only "
+            "in jobs that explicitly install and configure the relevant tool."
+        ),
+    )
     args = parser.parse_args()
 
     fixtures_base = Path(args.fixtures)
@@ -410,7 +442,11 @@ def main() -> int:
 
     for name in fixture_names:
         print(f"--- Forward test fixture: {name} ---")
-        ok, errors = run_fixture(name, fixtures_base)
+        ok, errors = run_fixture(
+            name,
+            fixtures_base,
+            require_iac_success=args.require_iac_success,
+        )
         if ok:
             print(f"PASS: {name}")
             passed.append(name)
