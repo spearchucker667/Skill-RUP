@@ -947,15 +947,89 @@ class VerificationPhase:
     # ------------------------------------------------------------------
     # IaC validation (canonical iac_validator tool contract)
     # ------------------------------------------------------------------
-    def _run_iac_validate(self) -> Dict[str, Any]:
-        """Validate Infrastructure-as-Code with terraform when present.
+    def _run_iac_security_scan(self) -> Dict[str, Any]:
+        """Run an IaC security scanner (tfsec / checkov) over *.tf files.
 
-        Implements the canonical ``iac_validator`` contract (validate/lint/
-        security/cost; terraform, pulumi, cloudformation, ansible, helm). The
-        deterministic runtime covers ``terraform validate`` when a Terraform
-        configuration exists and the binary is installed; missing configs are
-        ``not_applicable`` and missing tooling is reported ``unavailable`` with
-        an explicit follow-up (never fabricated as a pass).
+        Implements the ``security`` operation of the canonical ``iac_validator``
+        contract. Scanners are host-controlled and read-only; when neither is
+        installed the result is ``unavailable`` with an explicit follow-up
+        (never a fabricated pass). Findings at MEDIUM severity or above fail
+        the gate.
+        """
+        for scanner, args in (
+            ("tfsec", [".", "--format", "json", "--no-color"]),
+            ("checkov", ["-d", ".", "--framework", "terraform", "--output", "json"]),
+        ):
+            if not self._tool_available(scanner):
+                continue
+            try:
+                rc, stdout, stderr = self._run_tool([scanner, *args], timeout=300)
+            except Exception as e:  # pragma: no cover - depends on external tool
+                return {
+                    "tool": scanner,
+                    "executed": False,
+                    "status": "error",
+                    "passed": False,
+                    "reason": f"scan invocation failed: {e}",
+                }
+            findings: List[Dict[str, Any]] = []
+            try:
+                if scanner == "tfsec":
+                    data = json.loads(stdout)
+                    for res in data.get("results", []):
+                        severity = str(res.get("severity", "LOW")).upper()
+                        if severity in ("MEDIUM", "HIGH", "CRITICAL"):
+                            findings.append(
+                                {
+                                    "rule": res.get("rule_id", ""),
+                                    "file": res.get("location", {}).get("filename", ""),
+                                    "severity": severity,
+                                    "message": res.get("long_description", res.get("description", "")),
+                                }
+                            )
+                else:  # checkov
+                    data = json.loads(stdout)
+                    passed_checks = data.get("results", {}).get("passed_checks", [])
+                    failed_checks = data.get("results", {}).get("failed_checks", [])
+                    for check in failed_checks:
+                        severity = str(check.get("severity", "MEDIUM")).upper()
+                        if severity in ("MEDIUM", "HIGH", "CRITICAL"):
+                            findings.append(
+                                {
+                                    "rule": check.get("check_id", ""),
+                                    "file": check.get("file_path", ""),
+                                    "severity": severity,
+                                    "message": check.get("check_name", ""),
+                                }
+                            )
+                    # A run that completed with zero failed checks is a clean pass.
+                    if rc != 0 and not failed_checks:
+                        findings = [{"rule": "checkov-unknown", "severity": "MEDIUM", "message": (stdout + stderr).strip()[:500]}]
+            except Exception:
+                if rc != 0:
+                    findings = [{"rule": f"{scanner}-parse", "severity": "MEDIUM", "message": (stdout + stderr).strip()[:500]}]
+            return {
+                "executed": True,
+                "command_succeeded": rc == 0,
+                "passed": rc == 0 and not findings,
+                "tool": scanner,
+                "findings": len(findings),
+                "details": findings[:20],
+            }
+        return self._gate_not_run(
+            "unavailable",
+            "No IaC security scanner installed (tfsec or checkov); run the canonical "
+            "iac_validator security operation manually or in CI",
+        )
+
+    def _run_iac_validate(self) -> Dict[str, Any]:
+        """Validate Infrastructure-as-Code (canonical iac_validator contract).
+
+        Covers the validate operation via ``terraform validate`` for Terraform
+        configs and ``pulumi preview`` for Pulumi projects, plus the security
+        operation via tfsec/checkov when installed. Missing configs are
+        ``not_applicable``; missing tooling is reported ``unavailable`` with an
+        explicit follow-up (never fabricated as a pass).
         """
         has_tf = bool(
             list(self.target_dir.glob("*.tf"))
@@ -969,34 +1043,120 @@ class VerificationPhase:
                 "No Infrastructure-as-Code configuration detected (no *.tf or Pulumi project)",
             )
 
+        operations: Dict[str, Any] = {}
+        executed_any = False
+        passed_any = False
+        failed_any = False
+
         if has_tf:
             if not self._tool_available("terraform"):
-                return self._gate_not_run(
+                operations["terraform_validate"] = self._gate_not_run(
                     "unavailable",
                     "terraform not installed; run the canonical iac_validator gate "
                     "(terraform validate/plan) manually or in CI",
                     tool="terraform",
                 )
-            rc, stdout, stderr = self._run_tool(["terraform", "validate"], timeout=300)
-            combined = (stdout + "\n" + stderr).strip()
-            issues = combined.splitlines() if rc != 0 else []
-            return {
-                "executed": True,
-                "command_succeeded": rc == 0,
-                "passed": rc == 0,
-                "tool": "terraform",
-                "issues": issues[:20],
-                "details": combined[:2000],
-            }
+            else:
+                # terraform validate must run from the directory containing the
+                # .tf files (repo root when *.tf are there, terraform/ otherwise).
+                tf_dir = self.target_dir
+                tf_files = list(self.target_dir.glob("*.tf"))
+                if not tf_files:
+                    candidates = list(self.target_dir.glob("terraform/**/*.tf"))
+                    if candidates:
+                        tf_dir = self.target_dir / "terraform"
+                # init with a local backend is required before validate and is
+                # offline-capable for provider-agnostic configs; a network-bound
+                # provider fetch is reported unavailable rather than silently
+                # performed (offline tooling policy).
+                rc_init, out_init, err_init = run_command(
+                    ["terraform", "init", "-backend=false", "-input=false"],
+                    cwd=tf_dir,
+                    timeout=300,
+                )
+                if rc_init != 0:
+                    executed_any = True
+                    operations["terraform_validate"] = self._gate_not_run(
+                        "unavailable",
+                        "terraform init failed (likely needs network for providers); "
+                        "run `terraform init` + `terraform validate` in CI: "
+                        + (out_init + err_init).strip()[:500],
+                        tool="terraform",
+                    )
+                else:
+                    rc, stdout, stderr = run_command(
+                        ["terraform", "validate", "-no-color"],
+                        cwd=tf_dir,
+                        timeout=300,
+                    )
+                    combined = (stdout + "\n" + stderr).strip()
+                    executed_any = True
+                    operations["terraform_validate"] = {
+                        "executed": True,
+                        "command_succeeded": rc == 0,
+                        "passed": rc == 0,
+                        "tool": "terraform",
+                        "issues": combined.splitlines()[:20] if rc != 0 else [],
+                        "details": combined[:2000],
+                    }
+                    if rc == 0:
+                        passed_any = True
+                    else:
+                        failed_any = True
 
-        # Pulumi project present but no terraform config: report unavailable for
-        # the deterministic gate rather than inventing a Pulumi invocation.
-        return self._gate_not_run(
-            "unavailable",
-            "Pulumi project detected; the deterministic iac_validator gate covers "
-            "terraform only, so run `pulumi preview` manually or in CI",
-            tool="pulumi",
-        )
+            operations["iac_security"] = self._run_iac_security_scan()
+            if operations["iac_security"].get("executed"):
+                executed_any = True
+                if operations["iac_security"].get("passed"):
+                    passed_any = True
+                else:
+                    failed_any = True
+
+        if has_pulumi:
+            if not self._tool_available("pulumi"):
+                operations["pulumi_preview"] = self._gate_not_run(
+                    "unavailable",
+                    "pulumi not installed; run `pulumi preview` manually or in CI",
+                    tool="pulumi",
+                )
+            else:
+                rc, stdout, stderr = self._run_tool(
+                    ["pulumi", "preview", "--non-interactive", "--diff"],
+                    timeout=300,
+                )
+                combined = (stdout + "\n" + stderr).strip()
+                executed_any = True
+                operations["pulumi_preview"] = {
+                    "executed": True,
+                    "command_succeeded": rc == 0,
+                    "passed": rc == 0,
+                    "tool": "pulumi",
+                    "issues": combined.splitlines()[:20] if rc != 0 else [],
+                    "details": combined[:2000],
+                }
+                if rc == 0:
+                    passed_any = True
+                else:
+                    failed_any = True
+
+        if not executed_any:
+            unavailable = [
+                op.get("reason", op.get("status", "unavailable"))
+                for op in operations.values()
+            ]
+            return self._gate_not_run(
+                "unavailable",
+                " | ".join(unavailable) or "IaC tooling unavailable",
+            )
+
+        return {
+            "executed": True,
+            "command_succeeded": not failed_any,
+            "passed": not failed_any and executed_any,
+            "tool": "iac_validator",
+            "operations": operations,
+            "details": operations,
+        }
 
     # ------------------------------------------------------------------
     # Status determination

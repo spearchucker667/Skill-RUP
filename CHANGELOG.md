@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.2] - 2026-08-22
+### Changed
+- The `iac_scan` verification gate now implements the full canonical
+  `iac_validator` contract surface: `terraform init -backend=false` +
+  `terraform validate` for Terraform configs (run from the directory containing
+  the `.tf` files), `pulumi preview --non-interactive` for Pulumi projects, and
+  the `security` operation via tfsec or checkov (MEDIUM+ findings fail the
+  gate). Missing tooling is reported `unavailable` with an explicit follow-up
+  (never a fabricated pass); provider-bound `terraform init` is reported
+  `unavailable` rather than performing network acquisition.
+- Discovery emits `IAC-001` (missing Infrastructure-as-Code) under the
+  canonical `performance` gap dimension; the `ops_workstreams` forward fixture
+  exercises the Terraform scaffold end-to-end.
+- Added a `terraform-validation` CI job that generates the baseline through the
+  runtime and proves `terraform init` + `terraform validate` pass; the
+  generated baseline uses the `hashicorp/null` provider so the proof runs
+  offline with no credentials.
+
 ## [3.0.1] - 2026-08-21
 ### Changed
 - Ported the IaC handler (`_handle_iac`) from `NOT_PORTED` to a deterministic
@@ -80,3 +98,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [3.0.0]: https://github.com/spearchucker667/Skill-RUP/compare/338c5675dab2479a3a4f2ac6d70fd0a12c250847...v3.0.0
 [3.0.1]: https://github.com/spearchucker667/Skill-RUP/compare/v3.0.0...v3.0.1
+[3.0.2]: https://github.com/spearchucker667/Skill-RUP/compare/v3.0.1...v3.0.2

@@ -1839,3 +1839,50 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
 ### Next Actions
 - Cut a follow-up release (e.g. v3.0.2) to include the iac_validator gate and
   terraform CI job if a consistent tag is desired.
+
+## 2026-08-22 - Session: Full iac_validator contract, local terraform proof, release v3.0.2
+
+### Accomplishments
+- Extended the `iac_scan` verification gate to the full canonical
+  `iac_validator` contract surface:
+  - Terraform: `terraform init -backend=false -input=false` then
+    `terraform validate -no-color`, run from the directory containing the `.tf`
+    files. Provider-bound init failure is reported `unavailable` (offline
+    policy: never perform network acquisition), never a fabricated pass.
+  - Pulumi: `pulumi preview --non-interactive --diff` when a Pulumi project is
+    present and the binary is installed; `unavailable` otherwise.
+  - Security operation: tfsec (or checkov as fallback) over `*.tf`; MEDIUM+
+    findings fail the gate; neither installed -> `unavailable` with follow-up.
+  - Gate result carries a per-operation map; `_gate_passed` and status
+    determination unchanged in shape.
+- Downloaded terraform 1.8.5 to /tmp and proved the generated baseline
+  end-to-end locally: runtime lifecycle generated `terraform/main.tf`, then
+  `terraform init -backend=false` (rc 0) and `terraform validate` (rc 0,
+  "Success! The configuration is valid."). The `iac_scan` gate itself passes
+  when terraform is on PATH (remaining overall failure in the local probe was
+  pre-existing mypy/pip-audit findings in this environment, unrelated to IaC).
+- Tests: rewrote the four iac gate tests for the new shape and added
+  `test_iac_scan_runs_pulumi_preview`, `test_iac_scan_pulumi_missing_reports_unavailable`,
+  `test_iac_security_scan_tfsec_findings_fail_gate`,
+  `test_iac_security_scan_clean_tfsec_passes`. 221 pytest total.
+- Release v3.0.2: CHANGELOG entry + compare link, packaged
+  `dist/rup-skill-v3.0.2.zip` (316 files, SHA-256
+  `316db01c313b0f58e87d41252b07ba0686b42fd07e38342d86b1467f07dbf737`),
+  `--verify` passed all 316 hashes; archive confirmed to contain the extended
+  gate.
+
+### Validation Results
+- `pytest tests/` 221 passed; forward fixtures 13/13.
+- Local end-to-end terraform proof: init rc 0, validate rc 0.
+- `build_capability_map --check` PASS; `audit_sources --check` PASS;
+  `validate_rup` 40 valid; schemas/workflows `--check` PASS; `bandit` 0 issues;
+  `compileall` clean.
+
+### Open Blockers
+- None. Pulumi preview requires a backend/stack; the gate reports honestly when
+  it cannot run. tfsec/checkov not installed in CI yet (the gate degrades to
+  `unavailable`, which is the honest non-strict behavior).
+
+### Next Actions
+- Install tfsec (or checkov) in the terraform-validation CI job so the security
+  operation executes on every push.

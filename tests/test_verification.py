@@ -652,8 +652,8 @@ def test_iac_scan_reports_unavailable_when_terraform_missing(make_phase, tmp_pat
 
     assert result["executed"] is False
     assert result["status"] == "unavailable"
-    assert result["tool"] == "terraform"
-    assert "iac_validator" in result["reason"]
+    assert "terraform" in result["reason"]
+    assert phase._gate_passed("iac_scan", result) is False
 
 
 def test_iac_scan_executes_terraform_validate(make_phase, tmp_path, monkeypatch):
@@ -661,23 +661,34 @@ def test_iac_scan_executes_terraform_validate(make_phase, tmp_path, monkeypatch)
     (tmp_path / "main.tf").write_text('resource "null_resource" "x" {}\n')
 
     phase, _, _ = make_phase()
-    monkeypatch.setattr(phase, "_tool_available", lambda e: e == "terraform")
+
+    def _fake_available(executable: str) -> bool:
+        return executable == "terraform"
+
+    monkeypatch.setattr(phase, "_tool_available", _fake_available)
     calls = []
 
-    def _fake_run_tool(cmd, timeout=300):
-        calls.append(cmd)
-        assert cmd == ["terraform", "validate"]
+    def _fake_run_command(cmd, cwd, timeout=300, env=None):
+        calls.append((cmd, cwd))
         return 0, "Success! The configuration is valid.", ""
 
-    monkeypatch.setattr(phase, "_run_tool", _fake_run_tool)
+    monkeypatch.setattr(verification, "run_command", _fake_run_command)
 
     result = phase._run_iac_validate()
 
     assert result["executed"] is True
     assert result["passed"] is True
-    assert result["tool"] == "terraform"
+    assert result["tool"] == "iac_validator"
+    assert "terraform_validate" in result["operations"]
+    assert result["operations"]["terraform_validate"]["passed"] is True
+    # tfsec/checkov absent -> security operation reported unavailable, not a pass.
+    assert result["operations"]["iac_security"]["status"] == "unavailable"
     assert phase._gate_passed("iac_scan", result) is True
-    assert calls == [["terraform", "validate"]]
+    # init (offline, local backend) then validate, from the .tf directory.
+    assert calls == [
+        (["terraform", "init", "-backend=false", "-input=false"], tmp_path),
+        (["terraform", "validate", "-no-color"], tmp_path),
+    ]
 
 
 def test_iac_scan_fails_on_invalid_config(make_phase, tmp_path, monkeypatch):
@@ -686,14 +697,105 @@ def test_iac_scan_fails_on_invalid_config(make_phase, tmp_path, monkeypatch):
 
     phase, _, _ = make_phase()
     monkeypatch.setattr(phase, "_tool_available", lambda e: e == "terraform")
-    monkeypatch.setattr(
-        phase,
-        "_run_tool",
-        lambda cmd, timeout=300: (1, "", "Error: Unsupported argument"),
-    )
+
+    def _fake_run_command(cmd, cwd, timeout=300, env=None):
+        if cmd[:2] == ["terraform", "init"]:
+            return 0, "", ""
+        return 1, "", "Error: Unsupported argument"
+
+    monkeypatch.setattr(verification, "run_command", _fake_run_command)
 
     result = phase._run_iac_validate()
 
     assert result["executed"] is True
     assert result["passed"] is False
+    assert result["operations"]["terraform_validate"]["passed"] is False
     assert phase._gate_passed("iac_scan", result) is False
+
+
+def test_iac_scan_runs_pulumi_preview(make_phase, tmp_path, monkeypatch):
+    """Canonical iac_validator: Pulumi projects run pulumi preview when installed."""
+    (tmp_path / "Pulumi.yaml").write_text("name: demo\nruntime: python\n")
+
+    phase, _, _ = make_phase()
+    monkeypatch.setattr(phase, "_tool_available", lambda e: e == "pulumi")
+    calls = []
+
+    def _fake_run_tool(cmd, timeout=300):
+        calls.append(cmd)
+        return 0, "Previewing update (demo):", ""
+
+    monkeypatch.setattr(phase, "_run_tool", _fake_run_tool)
+
+    result = phase._run_iac_validate()
+
+    assert result["executed"] is True
+    assert result["passed"] is True
+    assert result["operations"]["pulumi_preview"]["passed"] is True
+    assert calls == [["pulumi", "preview", "--non-interactive", "--diff"]]
+    assert phase._gate_passed("iac_scan", result) is True
+
+
+def test_iac_scan_pulumi_missing_reports_unavailable(make_phase, tmp_path, monkeypatch):
+    """Canonical iac_validator: Pulumi project without pulumi -> unavailable."""
+    (tmp_path / "Pulumi.yaml").write_text("name: demo\nruntime: python\n")
+
+    phase, _, _ = make_phase()
+    monkeypatch.setattr(phase, "_tool_available", lambda _e: False)
+
+    result = phase._run_iac_validate()
+
+    assert result["executed"] is False
+    assert result["status"] == "unavailable"
+    assert "pulumi" in result["reason"]
+
+
+def test_iac_security_scan_tfsec_findings_fail_gate(make_phase, tmp_path, monkeypatch):
+    """Canonical iac_validator security op: tfsec MEDIUM+ findings fail the gate."""
+    (tmp_path / "main.tf").write_text('resource "null_resource" "x" {}\n')
+
+    phase, _, _ = make_phase()
+    monkeypatch.setattr(phase, "_tool_available", lambda e: e == "tfsec")
+
+    def _fake_run_tool(cmd, timeout=300):
+        payload = json.dumps(
+            {
+                "results": [
+                    {
+                        "rule_id": "GEN001",
+                        "severity": "HIGH",
+                        "location": {"filename": "main.tf"},
+                        "description": "Insecure config",
+                    }
+                ]
+            }
+        )
+        return 1, payload, ""
+
+    monkeypatch.setattr(phase, "_run_tool", _fake_run_tool)
+
+    result = phase._run_iac_security_scan()
+
+    assert result["executed"] is True
+    assert result["passed"] is False
+    assert result["findings"] == 1
+    assert result["tool"] == "tfsec"
+
+
+def test_iac_security_scan_clean_tfsec_passes(make_phase, tmp_path, monkeypatch):
+    """Canonical iac_validator security op: clean tfsec run passes."""
+    (tmp_path / "main.tf").write_text('resource "null_resource" "x" {}\n')
+
+    phase, _, _ = make_phase()
+    monkeypatch.setattr(phase, "_tool_available", lambda e: e == "tfsec")
+    monkeypatch.setattr(
+        phase,
+        "_run_tool",
+        lambda cmd, timeout=300: (0, json.dumps({"results": []}), ""),
+    )
+
+    result = phase._run_iac_security_scan()
+
+    assert result["executed"] is True
+    assert result["passed"] is True
+    assert result["findings"] == 0
