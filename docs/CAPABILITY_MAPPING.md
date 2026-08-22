@@ -2,7 +2,7 @@
 
 **Canonical Source**: `https://github.com/spearchucker667/RUP-Protocol` (v3.0.0 @ `c3d6f703`)
 
-**Total Capabilities**: 27 | **Deterministic**: 14 | **Partial**: 10 | **Agent-native**: 1 | **Not ported**: 2 | **Parity verified**: 0 | **Unmapped**: 0
+**Total Capabilities**: 27 | **Deterministic**: 14 | **Partial**: 12 | **Agent-native**: 1 | **Not ported**: 0 | **Parity verified**: 0 | **Unmapped**: 0
 
 | Capability ID | Title | Status | Verification Level | Transfer Rationale |
 |---------------|-------|--------|--------------------|--------------------|
@@ -23,8 +23,8 @@
 | `rup.phase_3_execution.workstreams.security` | Address security gaps | PARTIAL | behaviorally_verified | Partial: SECURITY.md generation is deterministic; secret rotation is agent-native; lockfile remediation is partial (runtime/execution.py security handlers). |
 | `rup.phase_3_execution.workstreams.documentation` | Improve documentation | DETERMINISTIC | behaviorally_verified | Deterministic: README/CONTRIBUTING scaffold generation in runtime/execution.py (_handle_readme/_handle_contributing). |
 | `rup.phase_3_execution.workstreams.governance` | Add governance and automation | PARTIAL | behaviorally_verified | Partial: CODEOWNERS/LICENSE handling is deterministic but emits placeholder owners and auto-selects Apache-2.0 (audit P1-30/31/32); legal decisions are agent-native. |
-| `rup.phase_3_execution.workstreams.containerization` | Add containerization best practices | NOT_PORTED | behaviorally_verified | Not ported: _handle_container routes to AGENT_ONLY; canonical Dockerfile/Compose guidance remains reference-only in workflows/ (audit P1-10). |
-| `rup.phase_3_execution.workstreams.observability` | Add logging, metrics, tracing | NOT_PORTED | behaviorally_verified | Not ported: _handle_observability routes to AGENT_ONLY; canonical logging/metrics/tracing guidance remains reference-only (audit P1-10). |
+| `rup.phase_3_execution.workstreams.containerization` | Add containerization best practices | PARTIAL | behaviorally_verified | Partial: canonical ws_containers Dockerfile/.dockerignore/Compose generation is deterministic (runtime/execution.py _handle_container); entrypoint/health-check confirmation remains agent-native. |
+| `rup.phase_3_execution.workstreams.observability` | Add logging, metrics, tracing | PARTIAL | behaviorally_verified | Partial: canonical ws_observability baseline (JSON logging, standard metrics, OpenTelemetry tracing) is scaffolded deterministically (runtime/execution.py _handle_observability); runtime instrumentation remains agent-native. |
 | `rup.phase_4_verification.4.1` | Test Verification | DETERMINISTIC | runtime_smoke_verified | Deterministic: test gates with 3-run flakiness detection in runtime/verification.py. |
 | `rup.phase_4_verification.4.2` | Lint Verification | DETERMINISTIC | runtime_smoke_verified | Deterministic: lint/build gates now require rc==0 plus semantic results (RUP-VERIFY-001). |
 | `rup.phase_4_verification.4.3` | Security Verification | PARTIAL | runtime_smoke_verified | Partial: security gates run, but secret scanning can report incomplete coverage and pattern coverage is below the canonical contract (audit P1-20/21). |

@@ -51,5 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Refactored `SKILL.md` to properly route sub-workflows and enforce schema validation.
 - Restructured `runtime/` to strictly return typed outputs and adhere to Schema Draft 2020-12.
+- Ported the containerization (`ws_containers`) and observability (`ws_observability`)
+  workstreams from `NOT_PORTED` to `PARTIAL`: canonical multi-stage Dockerfile /
+  `.dockerignore` / Compose scaffolding (language-aware, never overwrites user
+  files) and an observability baseline (JSON structured logging, standard
+  metrics, OpenTelemetry tracing with W3C Trace Context). All 27 canonical
+  capabilities now have implementation; 0 remain `not_ported`.
+- Discovery now flags missing container configuration (`CONT-001`, classified
+  under the canonical `performance` gap dimension) and a missing observability
+  baseline (`OBS-001`, under `dx`) since the canonical Gap category enum has no
+  dedicated slots; execution routes those gap ids to the `ws_containers` /
+  `ws_observability` handlers. New `ops_workstreams` forward fixture exercises
+  both handlers through the full CLI lifecycle.
 
 [3.0.0]: https://github.com/spearchucker667/Skill-RUP/compare/338c5675dab2479a3a4f2ac6d70fd0a12c250847...v3.0.0

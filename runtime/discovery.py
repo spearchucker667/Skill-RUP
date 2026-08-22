@@ -196,6 +196,43 @@ class DiscoveryPhase:
                 "files_affected": [".github/CODEOWNERS"]
             })
 
+        # --- 1.7 Containerization Gaps (ws_containers) ---
+        # The canonical Gap category enum (protocol/rup-schema.json) has no
+        # containerization/observability slots, so the gaps are classified under
+        # the closest canonical dimensions (performance / dx) while their ids
+        # (CONT-xxx / OBS-xxx) drive execution subtype routing.
+        container_tooling = tooling.get("containerization") or ""
+        has_container_definition = bool(container_tooling) or (
+            self.target_dir / "Dockerfile"
+        ).exists()
+        if not has_container_definition:
+            gaps.append({
+                "id": "CONT-001",
+                "category": "performance",
+                "severity": "medium",
+                "title": "Missing Container Configuration",
+                "description": "No Dockerfile/Containerfile or Compose definition detected.",
+                "impact": "Application cannot be packaged or deployed reproducibly as a container.",
+                "suggested_fix": "Add a multi-stage Dockerfile with pinned dependencies, a non-root runtime user, health checks, and a .dockerignore.",
+                "effort_estimate": "medium",
+                "files_affected": ["Dockerfile", ".dockerignore"]
+            })
+
+        # --- 1.8 Observability Gaps (ws_observability) ---
+        has_observability = (self.target_dir / "docs" / "observability.md").exists()
+        if not has_observability:
+            gaps.append({
+                "id": "OBS-001",
+                "category": "dx",
+                "severity": "low",
+                "title": "Missing Observability Baseline",
+                "description": "No structured logging, metrics, or tracing baseline documented.",
+                "impact": "Runtime issues are hard to diagnose without correlated logs, metrics, and traces.",
+                "suggested_fix": "Add an observability baseline: JSON structured logging, standard metrics, OpenTelemetry tracing with W3C Trace Context.",
+                "effort_estimate": "small",
+                "files_affected": ["docs/observability.md"]
+            })
+
         return gaps
 
     def _calculate_risk_and_scores(self, gaps: List[Dict[str, Any]], metadata: Dict[str, Any]) -> Dict[str, Any]:

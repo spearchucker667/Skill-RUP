@@ -139,6 +139,24 @@ def build_adversarial_content(target_dir: Path) -> None:
     )
 
 
+def build_ops_workstreams(target_dir: Path) -> None:
+    """Python app without containerization or observability (ws_containers / ws_observability).
+
+    Discovery must flag CONT-001 (no Dockerfile) and OBS-001 (no observability
+    baseline); execution must scaffold the Dockerfile/.dockerignore/
+    docker-compose.yml and docs/observability.md through the real CLI lifecycle.
+    """
+    _write(
+        target_dir / "src" / "app.py",
+        "def handler(request):\n    return {'status': 'ok'}\n",
+    )
+    _write(
+        target_dir / "tests" / "test_app.py",
+        "from src.app import handler\n\ndef test_handler():\n    assert handler({})['status'] == 'ok'\n",
+    )
+    _write(target_dir / "requirements.txt", "# runtime deps\n")
+
+
 def build_workspace(target_dir: Path) -> None:
     """npm workspace: two packages plus a root manifest (audit P1-11)."""
     _write(
@@ -170,6 +188,7 @@ BUILDERS = {
     "symlink_escape": build_symlink_escape,
     "adversarial_content": build_adversarial_content,
     "workspace": build_workspace,
+    "ops_workstreams": build_ops_workstreams,
 }
 
 

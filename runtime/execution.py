@@ -83,6 +83,9 @@ class ExecutionPhase:
             "head": None,
             "files": {},
         }
+        # Discovery metadata (repo_metadata) loaded by execute(); initialized
+        # empty so workstream handlers can degrade gracefully in unit tests.
+        self.discovery_data: Dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Jailed target I/O helpers (RUP-SEC-001 write side)
@@ -369,7 +372,14 @@ class ExecutionPhase:
                 return "license"
             return "governance"
 
-        # Containers / IaC / Observability
+        # Containers / IaC / Observability. Gap ids are authoritative because
+        # the canonical Gap category enum has no containerization/observability
+        # slots (discovery classifies them as performance/dx); category remains
+        # the fallback for legacy or explicitly-categorized plans.
+        if item_id.startswith("CONT"):
+            return "container"
+        if item_id.startswith("OBS"):
+            return "observability"
         if category in ("containerization", "containers", "container"):
             return "container"
         if category in ("iac", "infrastructure"):
@@ -946,19 +956,245 @@ public issue for security-sensitive findings.
                 )
         return changes, []
 
+    # Canonical Phase-2 containerization workstream (ws_containers). The
+    # Dockerfile and Compose templates below mirror protocol/rup-protocol.yaml
+    # `phases.2.workstreams.containerization` with per-language parameter
+    # substitution; generation is deterministic and additive (never overwrites
+    # an existing Dockerfile / .dockerignore / docker-compose.yml).
+    _CONTAINER_LANG_MAP: Dict[str, Dict[str, str]] = {
+        "python": {
+            "base_image": "python:3.12-slim",
+            "lockfile": "requirements.txt",
+            "install_command": "pip install --no-cache-dir -r requirements.txt",
+            "build_command": "python -m compileall -q .",
+            "runtime_image": "python:3.12-slim",
+            "artifact": "",
+            "port": "8000",
+            "health_check_command": "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)\"",
+            "entrypoint": "python app.py",
+        },
+        "javascript": {
+            "base_image": "node:20-alpine",
+            "lockfile": "package-lock.json",
+            "install_command": "npm ci",
+            "build_command": "npm run build",
+            "runtime_image": "node:20-alpine",
+            "artifact": "",
+            "port": "8080",
+            "health_check_command": "wget --no-verbose --tries=1 --spider http://localhost:8080/health",
+            "entrypoint": "npm start",
+        },
+        "typescript": {
+            "base_image": "node:20-alpine",
+            "lockfile": "package-lock.json",
+            "install_command": "npm ci",
+            "build_command": "npm run build",
+            "runtime_image": "node:20-alpine",
+            "artifact": "dist",
+            "port": "8080",
+            "health_check_command": "wget --no-verbose --tries=1 --spider http://localhost:8080/health",
+            "entrypoint": "npm start",
+        },
+        "rust": {
+            "base_image": "rust:1.80-slim",
+            "lockfile": "Cargo.lock",
+            "install_command": "cargo build --release",
+            "build_command": "cargo build --release",
+            "runtime_image": "debian:bookworm-slim",
+            "artifact": "target/release/app",
+            "port": "8080",
+            "health_check_command": "curl --fail http://localhost:8080/health",
+            "entrypoint": "./app",
+        },
+        "go": {
+            "base_image": "golang:1.22-alpine",
+            "lockfile": "go.sum",
+            "install_command": "go mod download",
+            "build_command": "go build -o /app/bin/app .",
+            "runtime_image": "alpine:3.20",
+            "artifact": "bin/app",
+            "port": "8080",
+            "health_check_command": "wget --no-verbose --tries=1 --spider http://localhost:8080/health",
+            "entrypoint": "./app",
+        },
+    }
+
+    _DOCKERIGNORE_TEMPLATE = (
+        "# Dependency directories\n"
+        "node_modules/\n"
+        "vendor/\n"
+        "__pycache__/\n"
+        ".venv/\n"
+        "\n"
+        "# Build artifacts\n"
+        "dist/\n"
+        "build/\n"
+        "target/\n"
+        "*.py[cod]\n"
+        "\n"
+        "# Test and coverage output\n"
+        ".pytest_cache/\n"
+        ".coverage\n"
+        "coverage.xml\n"
+        "\n"
+        "# Version control and local state\n"
+        ".git/\n"
+        ".gitignore\n"
+        ".rup/\n"
+        ".env\n"
+        ".DS_Store\n"
+    )
+
+    _DOCKERFILE_TEMPLATE = (
+        "# syntax=docker/dockerfile:1\n"
+        "\n"
+        "# Build stage\n"
+        "FROM {base_image} AS builder\n"
+        "WORKDIR /app\n"
+        "COPY {lockfile} .\n"
+        "RUN {install_command}\n"
+        "COPY . .\n"
+        "RUN {build_command}\n"
+        "\n"
+        "# Runtime stage\n"
+        "FROM {runtime_image}\n"
+        "{user_setup}"
+        "USER appuser\n"
+        "WORKDIR /app\n"
+        "{copy_artifact}"
+        "EXPOSE {port}\n"
+        "HEALTHCHECK --interval=30s --timeout=3s \\\n"
+        "  CMD {health_check_command}\n"
+        "CMD [\"{entrypoint}\"]\n"
+    )
+
+    _COMPOSE_TEMPLATE = (
+        "services:\n"
+        "  app:\n"
+        "    build: .\n"
+        "    ports:\n"
+        "      - \"{port}:{port}\"\n"
+        "    environment:\n"
+        "      - APP_ENV=production\n"
+        "    restart: unless-stopped\n"
+        "    healthcheck:\n"
+        "      test: [\"CMD-SHELL\", \"{health_check_command}\"]\n"
+        "      interval: 30s\n"
+        "      timeout: 10s\n"
+        "      retries: 3\n"
+    )
+
     def _handle_container(
         self, item: Dict[str, Any], subtype: str
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Generate a canonical multi-stage Dockerfile plus supporting files.
+
+        Follows the canonical ``ws_containers`` workstream (multi-stage builds,
+        non-root user, health checks, .dockerignore) with per-language
+        parameters. Never overwrites an existing Dockerfile / .dockerignore /
+        docker-compose.yml. Unsupported languages and non-application repos are
+        routed to AGENT_ONLY instead of being scaffolded blindly.
+        """
         item_id = item.get("id", "")
-        return [], [
+        meta = self.discovery_data.get("repo_metadata", {})
+        primary_lang = str(meta.get("primary_language", "python") or "python").lower()
+        params = self._CONTAINER_LANG_MAP.get(primary_lang)
+        if params is None:
+            return [], [
+                self._recommendation(
+                    item_id,
+                    subtype,
+                    "AGENT_ONLY",
+                    f"No Dockerfile generator for primary language '{primary_lang}'; "
+                    "author the container definition manually.",
+                )
+            ]
+
+        changes: List[Dict[str, Any]] = []
+
+        # Dockerfile (skip silently when present: user-authored config wins).
+        dockerfile_path = self._handler_path("Dockerfile")
+        if not dockerfile_path.exists():
+            copy_artifact = (
+                f"COPY --from=builder /app/{params['artifact']} ./\n"
+                if params["artifact"]
+                else "COPY --from=builder /app .\n"
+            )
+            # Canonical best practice: non-root runtime user. Alpine bases use
+            # adduser; Debian-based bases use useradd.
+            user_setup = (
+                "RUN addgroup -S appuser && adduser -S -G appuser appuser\n"
+                if "alpine" in params["runtime_image"]
+                else "RUN useradd --create-home --shell /usr/sbin/nologin appuser\n"
+            )
+            dockerfile = self._DOCKERFILE_TEMPLATE.format(
+                base_image=params["base_image"],
+                lockfile=params["lockfile"],
+                install_command=params["install_command"],
+                build_command=params["build_command"],
+                runtime_image=params["runtime_image"],
+                copy_artifact=copy_artifact,
+                user_setup=user_setup,
+                port=params["port"],
+                health_check_command=params["health_check_command"],
+                entrypoint=params["entrypoint"],
+            )
+            self._write_target("Dockerfile", dockerfile)
+            changes.append(
+                {
+                    "file_path": "Dockerfile",
+                    "change_type": "create",
+                    "rationale": (
+                        "Generated multi-stage Dockerfile from canonical ws_containers template "
+                        "(non-root runtime, pinned deps, health check)"
+                    ),
+                    "backlog_item_id": item_id,
+                }
+            )
+
+        # .dockerignore (additive baseline; never overwrite).
+        di_path = self._handler_path(".dockerignore")
+        if not di_path.exists():
+            self._write_target(".dockerignore", self._DOCKERIGNORE_TEMPLATE)
+            changes.append(
+                {
+                    "file_path": ".dockerignore",
+                    "change_type": "create",
+                    "rationale": "Generated .dockerignore minimizing build context",
+                    "backlog_item_id": item_id,
+                }
+            )
+
+        # docker-compose.yml (only when the repo looks like an application).
+        repo_type = str(meta.get("repo_type", "application") or "application").lower()
+        compose_path = self._handler_path("docker-compose.yml")
+        if repo_type != "library" and not compose_path.exists():
+            self._write_target(
+                "docker-compose.yml",
+                self._COMPOSE_TEMPLATE.format(
+                    port=params["port"],
+                    health_check_command=params["health_check_command"],
+                ),
+            )
+            changes.append(
+                {
+                    "file_path": "docker-compose.yml",
+                    "change_type": "create",
+                    "rationale": "Generated Compose scaffold from canonical ws_containers template",
+                    "backlog_item_id": item_id,
+                }
+            )
+
+        recommendations = [
             self._recommendation(
                 item_id,
                 subtype,
-                "NOT_PORTED",
-                "Container and Dockerfile generation is not ported to the deterministic runtime; "
-                "author manually or extend the runtime with a container workstream handler.",
+                "PARTIAL",
+                "Scaffolded canonical Dockerfile/.dockerignore/Compose baseline; "
+                "confirm the health check path and entrypoint against the application.",
             )
         ]
+        return changes, recommendations
 
     def _handle_iac(
         self, item: Dict[str, Any], subtype: str
@@ -974,19 +1210,116 @@ public issue for security-sensitive findings.
             )
         ]
 
+    # Canonical Phase-2 observability workstream (ws_observability): JSON
+    # structured logging, standard RED/USE metrics, and OpenTelemetry tracing
+    # with W3C Trace Context, per protocol/rup-protocol.yaml
+    # `phases.2.workstreams.observability`. The handler emits a deterministic
+    # baseline document and per-language configuration scaffold.
+    _OBSERVABILITY_BASELINE = (
+        "# Observability Baseline\n"
+        "\n"
+        "Generated from the canonical RUP `ws_observability` workstream. Adopt the "
+        "standards below so logs, metrics, and traces share one correlation model.\n"
+        "\n"
+        "## Logging\n"
+        "\n"
+        "- Format: **JSON structured logging** with one event per line.\n"
+        "- Required fields: `timestamp`, `level`, `message`, `service`, `trace_id`, `span_id`; "
+        "add `duration_ms` for request-scoped events.\n"
+        "- Example:\n"
+        "\n"
+        "```json\n"
+        "{\"timestamp\":\"2025-01-18T12:00:00Z\",\"level\":\"info\",\"message\":\"Request processed\","
+        "\"service\":\"api\",\"trace_id\":\"abc123\",\"span_id\":\"def456\",\"duration_ms\":42}\n"
+        "```\n"
+        "\n"
+        "## Metrics\n"
+        "\n"
+        "Standard instrument set:\n"
+        "\n"
+        "- `request_count` (counter)\n"
+        "- `request_duration_seconds` (histogram)\n"
+        "- `error_count` (counter)\n"
+        "- `active_connections` (gauge)\n"
+        "\n"
+        "## Tracing\n"
+        "\n"
+        "- Standard: **OpenTelemetry**\n"
+        "- Propagation: **W3C Trace Context** (`traceparent` header)\n"
+        "- Logs, metrics, and traces must share the same `trace_id`/`span_id`.\n"
+    )
+
     def _handle_observability(
         self, item: Dict[str, Any], subtype: str
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Emit a canonical observability baseline (logging/metrics/tracing).
+
+        Deterministic scaffolding only: the document and per-language notes are
+        generated, while runtime instrumentation remains a manual/agent step,
+        so the workstream is reported PARTIAL rather than fully ported.
+        """
         item_id = item.get("id", "")
-        return [], [
+        meta = self.discovery_data.get("repo_metadata", {})
+        primary_lang = str(meta.get("primary_language", "python") or "python").lower()
+        changes: List[Dict[str, Any]] = []
+
+        obs_path = self._handler_path("docs/observability.md")
+        if not obs_path.exists():
+            self._mkdir_target("docs")
+            content = self._OBSERVABILITY_BASELINE
+            if primary_lang in ("javascript", "typescript"):
+                content += (
+                    "\n## Language Notes (Node.js)\n\n"
+                    "- JSON logging: `pino` (or `bunyan`); export `trace_id`/`span_id` on every record.\n"
+                    "- Metrics: `prom-client` with the standard instrument set above.\n"
+                    "- Tracing: `@opentelemetry/sdk-node` + `@opentelemetry/instrumentation-http`; "
+                    "enable W3C propagator.\n"
+                )
+            elif primary_lang == "python":
+                content += (
+                    "\n## Language Notes (Python)\n\n"
+                    "- JSON logging: `structlog` or `python-json-logger`; bind `service`, `trace_id`, `span_id`.\n"
+                    "- Metrics: `prometheus-client`.\n"
+                    "- Tracing: `opentelemetry-sdk` + `opentelemetry-instrumentation-flask/fastapi`; "
+                    "W3C propagator enabled by default.\n"
+                )
+            elif primary_lang == "go":
+                content += (
+                    "\n## Language Notes (Go)\n\n"
+                    "- JSON logging: `slog` with `slog.NewJSONHandler`.\n"
+                    "- Metrics: `prometheus/client_golang`.\n"
+                    "- Tracing: `go.opentelemetry.io/otel` with `otelhttp` middleware.\n"
+                )
+            elif primary_lang == "rust":
+                content += (
+                    "\n## Language Notes (Rust)\n\n"
+                    "- JSON logging: `tracing` with `tracing-subscriber` JSON formatter.\n"
+                    "- Metrics: `metrics` or `prometheus` crate.\n"
+                    "- Tracing: `tracing-opentelemetry` + `opentelemetry-otlp`.\n"
+                )
+            self._write_target("docs/observability.md", content)
+            changes.append(
+                {
+                    "file_path": "docs/observability.md",
+                    "change_type": "create",
+                    "rationale": (
+                        "Generated canonical observability baseline: JSON structured logging, "
+                        "standard metrics, OpenTelemetry tracing with W3C Trace Context"
+                    ),
+                    "backlog_item_id": item_id,
+                }
+            )
+
+        recommendations = [
             self._recommendation(
                 item_id,
                 subtype,
-                "NOT_PORTED",
-                "Observability configuration generation is not ported to the deterministic runtime; "
-                "author manually or extend the runtime with an observability workstream handler.",
+                "PARTIAL",
+                "Generated observability baseline (logging/metrics/tracing standards); "
+                "wire runtime instrumentation into the application code.",
             )
         ]
+        return changes, recommendations
 
     def _execute_workstream_item(
         self, item: Dict[str, Any], discovery_data: Dict[str, Any]
@@ -1407,6 +1740,7 @@ public issue for security-sensitive findings.
             raise RuntimeError("Missing RUP_PLAN.json. Must run plan first.")
 
         discovery_data = self.state_manager.load_json("RUP_DISCOVERY.json")
+        self.discovery_data = discovery_data or {}
         backlog = plan_data.get("backlog", [])
         selected_ids = set(plan_data.get("selected_items", []))
         selected_items = [item for item in backlog if item.get("id") in selected_ids]

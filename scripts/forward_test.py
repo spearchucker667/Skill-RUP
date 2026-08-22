@@ -201,6 +201,39 @@ def check_fixture_specific(target_dir: Path, fixture_name: str) -> List[str]:
         if files > 10:
             errors.append(f"Symlink escape may have been followed ({files} files discovered)")
 
+    if fixture_name == "ops_workstreams":
+        # ws_containers / ws_observability handlers must have run end-to-end:
+        # canonical container scaffolding plus the observability baseline doc.
+        plan_data = json.loads((state_dir / "RUP_PLAN.json").read_text(encoding="utf-8"))
+        selected = set(plan_data.get("selected_items", []))
+        for gap_id in ("CONT-001", "OBS-001"):
+            if gap_id not in selected:
+                errors.append(f"ops_workstreams fixture: {gap_id} not selected by planning")
+
+        exec_data = json.loads((state_dir / "RUP_EXECUTION.json").read_text(encoding="utf-8"))
+        changes = {c.get("file_path") for c in exec_data.get("changes", [])}
+        for path in ("Dockerfile", ".dockerignore", "docker-compose.yml", "docs/observability.md"):
+            if path not in changes:
+                errors.append(f"ops_workstreams fixture: {path} missing from execution changes")
+
+        dockerfile = target_dir / "Dockerfile"
+        if dockerfile.exists():
+            text = dockerfile.read_text(encoding="utf-8")
+            for marker in ("FROM python:3.12-slim AS builder", "USER appuser", "HEALTHCHECK"):
+                if marker not in text:
+                    errors.append(f"ops_workstreams fixture: Dockerfile missing marker {marker!r}")
+        else:
+            errors.append("ops_workstreams fixture: Dockerfile was not generated")
+
+        obs = target_dir / "docs" / "observability.md"
+        if obs.exists():
+            text = obs.read_text(encoding="utf-8")
+            for marker in ("JSON structured logging", "OpenTelemetry", "W3C Trace Context"):
+                if marker not in text:
+                    errors.append(f"ops_workstreams fixture: observability doc missing marker {marker!r}")
+        else:
+            errors.append("ops_workstreams fixture: docs/observability.md was not generated")
+
     return errors
 
 
@@ -228,6 +261,11 @@ def run_fixture(fixture_name: str, fixtures_base: Path) -> Tuple[bool, List[str]
             # explicitly overrides that guard to exercise the full lifecycle.
             "--override-escalation",
         ]
+        # The ops_workstreams fixture targets the P2/P3 containerization and
+        # observability workstreams, which only fit the plan when the run budget
+        # admits them alongside the P1 backlog.
+        if fixture_name == "ops_workstreams":
+            cmd.extend(["--time-budget", "120"])
         result = _run(cmd, REPO_ROOT)
 
         if fixture_name in ADVERSARIAL_CONTENT_FIXTURES:

@@ -1676,3 +1676,91 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
 - Create the GitHub release from tag `v3.0.0` to trigger
   `release-package.yml`, which re-validates, re-packages, and uploads the
   archive + checksum, and run `skills-ref validate` on the packaged skill.
+
+## 2026-08-21 - Session: Port containerization and observability workstreams
+
+### Accomplishments
+- Implemented `_handle_container` as a real deterministic workstream: canonical
+  multi-stage Dockerfile generation from the `ws_containers` template with
+  per-language parameters (python/javascript/typescript/rust/go), `.dockerignore`
+  baseline, and `docker-compose.yml` scaffolding. Additive only — an existing
+  `Dockerfile` / `.dockerignore` / `docker-compose.yml` is never overwritten.
+  Unsupported languages and library repos route to `AGENT_ONLY` instead of
+  blind scaffolding. Health-check/entrypoint confirmation is deferred to the
+  agent (PARTIAL disposition).
+- Implemented `_handle_observability` as a deterministic scaffold of the
+  canonical `ws_observability` baseline: JSON structured logging (timestamp /
+  level / message / service / trace_id / span_id), standard metrics
+  (request_count, request_duration_seconds, error_count, active_connections),
+  OpenTelemetry tracing with W3C Trace Context, plus per-language library notes
+  (structlog/prometheus-client/opentelemetry for Python, pino/prom-client/OTel
+  for Node, slog for Go, tracing for Rust). Written to `docs/observability.md`.
+- ExecutionPhase now loads and stores discovery metadata (`self.discovery_data`)
+  so workstream handlers can read `repo_metadata.primary_language` /
+  `repo_type`; initialized empty for unit-test safety.
+- Capability map: containerization and observability promoted from
+  `not_ported` to `partial` with semantic tests pointing at the new behavioral
+  tests. IaC remains `not_ported`. Regenerated `provenance/capability-lineage.json`
+  and `docs/CAPABILITY_MAPPING.md` (now 27 capabilities: 14 deterministic,
+  12 partial, 1 agent-native, 0 not_ported).
+- Tests: `test_containerization_generates_dockerfile`,
+  `test_containerization_respects_existing_dockerfile_and_language`,
+  `test_containerization_unsupported_language_is_agent_only`,
+  `test_observability_generates_baseline`, `test_iac_remains_not_ported`;
+  capability invariant test updated to assert PARTIAL for the promoted
+  workstreams and that any remaining NOT_PORTED declaration can never be
+  upgraded.
+
+### Validation Results
+- `pytest tests/` 212 passed (was 208); forward fixtures 12/12.
+- `build_capability_map --check` PASS; `audit_sources --check` PASS
+  (12/63/51/0); `validate_rup` 40 valid; schemas/workflows `--check` PASS;
+  `bandit` 0 issues; `compileall` clean.
+
+### Open Blockers
+- None. IaC (`_handle_iac`) remains the only `not_ported` execution workstream;
+  porting it would require Terraform/Pulumi/CloudFormation generation decisions
+  that are currently reference-only.
+
+### Next Actions
+- Consider porting IaC or keeping it declared `not_ported` with reference-only
+  workflows.
+- Regenerate the release archive (`dist/rup-skill-v3.0.0.zip`) since runtime
+  code changed after the v3.0.0 tag was cut.
+
+## 2026-08-21 - Session: Forward fixture + release archive refresh
+
+### Accomplishments
+- Discovery now emits `CONT-001` (missing container configuration) and
+  `OBS-001` (missing observability baseline). The canonical Gap category enum
+  has no containerization/observability slots, so the gaps are classified under
+  the closest canonical dimensions (`performance` / `dx`) and execution routes
+  them by gap id (`CONT-*` / `OBS-*`) to the `ws_containers` / `ws_observability`
+  handlers. Plan items carry the mapped category freely (backlog category is a
+  free string in the canonical schema).
+- New `ops_workstreams` forward fixture: a Python app with tests and
+  `requirements.txt` but no Dockerfile / observability baseline. The harness
+  gives it a 120-minute plan budget (the P2/P3 workstreams only fit alongside
+  the P1 backlog), and `check_fixture_specific` asserts CONT-001/OBS-001 were
+  selected, the execution changes contain Dockerfile / .dockerignore /
+  docker-compose.yml / docs/observability.md, and the generated files carry the
+  canonical markers (multi-stage builder, `USER appuser`, `HEALTHCHECK`,
+  JSON structured logging, OpenTelemetry, W3C Trace Context).
+- Rebuilt `dist/rup-skill-v3.0.0.zip` from current HEAD after the runtime
+  changes: 316 files, no symlink members, SHA-256
+  `4c1e0aa65c4f964b24a97fd6d6619fb019d8af1eb6f5b6694d52438bf582aa45`,
+  `--verify` passed all 316 hashes.
+
+### Validation Results
+- `pytest tests/` 212 passed; forward fixtures 13/13 (new `ops_workstreams`).
+- `package_skill.py --verify` PASS; `build_capability_map --check` PASS;
+  `audit_sources --check` PASS (12/63/51/0); `validate_rup` 40 valid;
+  schemas/workflows `--check` PASS; `bandit` 0 issues; `compileall` clean.
+
+### Open Blockers
+- None.
+
+### Next Actions
+- The `v3.0.0` tag predates these changes; the archive has been refreshed to
+  match current HEAD, but the tag itself still points at the pre-handler
+  commit. If a strict release is needed, cut a new tag or amend the release.

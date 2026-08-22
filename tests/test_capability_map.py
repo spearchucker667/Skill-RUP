@@ -136,23 +136,34 @@ def test_verify_capabilities_counts_are_consistent():
 
 
 def test_not_ported_capabilities_are_never_reported_ported():
-    """A NOT_PORTED workstream stays NOT_PORTED even when symbols exist and semantic tests pass."""
+    """A NOT_PORTED workstream stays NOT_PORTED even when symbols exist and semantic tests pass.
+
+    Containerization and observability were promoted from NOT_PORTED to PARTIAL
+    once deterministic handlers were implemented; the invariant below holds for
+    any capability still declared NOT_PORTED (e.g. a future IaC port).
+    """
     result = verify_capabilities(REPO_ROOT)
     by_id = {c["id"]: c for c in result["capabilities"]}
 
+    # Ported workstreams now declare PARTIAL (implementation present, further
+    # work required) rather than NOT_PORTED.
     for ws_id in (
         "rup.phase_3_execution.workstreams.containerization",
         "rup.phase_3_execution.workstreams.observability",
     ):
         cap = by_id[ws_id]
-        # Implementation and tests are present...
-        assert cap["port_class"] == "not_ported"
+        assert cap["port_class"] == "partial"
         assert cap["symbols"]
-        # ...but the declared class is authoritative and cannot be upgraded.
-        assert cap["port_status"] == "not_ported"
+        assert cap["semantic_tests"]
+        assert cap["port_status"] == "partial"
 
-    # No capability may ever carry the legacy "ported" label.
-    assert all(c["port_status"] != "ported" for c in result["capabilities"])
+    # The declared class is authoritative: any capability still declared
+    # NOT_PORTED must be reported NOT_PORTED, never as ported/partial.
+    for cap in result["capabilities"]:
+        if cap["port_class"] == "not_ported":
+            assert cap["port_status"] == "not_ported"
+        # No capability may ever carry the legacy "ported" label.
+        assert cap["port_status"] != "ported"
 
 
 def test_partial_and_agent_native_classes_are_reported_honestly():

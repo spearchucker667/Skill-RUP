@@ -461,10 +461,10 @@
     "category": "execution",
     "title": "Add containerization best practices",
     "mandatory": true,
-    "port_class": "not_ported",
-    "port_status": "not_ported",
+    "port_class": "partial",
+    "port_status": "partial",
     "verification_level": "behaviorally_verified",
-    "transfer_rationale": "Not ported: _handle_container routes to AGENT_ONLY; canonical Dockerfile/Compose guidance remains reference-only in workflows/ (audit P1-10).",
+    "transfer_rationale": "Partial: canonical ws_containers Dockerfile/.dockerignore/Compose generation is deterministic (runtime/execution.py _handle_container); entrypoint/health-check confirmation remains agent-native.",
     "implementation": [
       "runtime/execution.py"
     ],
@@ -474,7 +474,7 @@
     ],
     "runtime_smoke_tests": [],
     "semantic_tests": [
-      "tests/test_execution.py::test_container_iac_observability_are_not_ported"
+      "tests/test_execution.py::test_containerization_generates_dockerfile"
     ],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {
@@ -488,10 +488,10 @@
     "category": "execution",
     "title": "Add logging, metrics, tracing",
     "mandatory": true,
-    "port_class": "not_ported",
-    "port_status": "not_ported",
+    "port_class": "partial",
+    "port_status": "partial",
     "verification_level": "behaviorally_verified",
-    "transfer_rationale": "Not ported: _handle_observability routes to AGENT_ONLY; canonical logging/metrics/tracing guidance remains reference-only (audit P1-10).",
+    "transfer_rationale": "Partial: canonical ws_observability baseline (JSON logging, standard metrics, OpenTelemetry tracing) is scaffolded deterministically (runtime/execution.py _handle_observability); runtime instrumentation remains agent-native.",
     "implementation": [
       "runtime/execution.py"
     ],
@@ -501,7 +501,7 @@
     ],
     "runtime_smoke_tests": [],
     "semantic_tests": [
-      "tests/test_execution.py::test_container_iac_observability_are_not_ported"
+      "tests/test_execution.py::test_observability_generates_baseline"
     ],
     "translation_type": "agent-native-deterministic",
     "canonical_source": {

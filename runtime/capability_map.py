@@ -96,12 +96,14 @@ TRANSFER_RATIONALE: Dict[str, str] = {
         "and auto-selects Apache-2.0 (audit P1-30/31/32); legal decisions are agent-native."
     ),
     "rup.phase_3_execution.workstreams.containerization": (
-        "Not ported: _handle_container routes to AGENT_ONLY; canonical Dockerfile/Compose "
-        "guidance remains reference-only in workflows/ (audit P1-10)."
+        "Partial: canonical ws_containers Dockerfile/.dockerignore/Compose generation is "
+        "deterministic (runtime/execution.py _handle_container); entrypoint/health-check "
+        "confirmation remains agent-native."
     ),
     "rup.phase_3_execution.workstreams.observability": (
-        "Not ported: _handle_observability routes to AGENT_ONLY; canonical logging/metrics/"
-        "tracing guidance remains reference-only (audit P1-10)."
+        "Partial: canonical ws_observability baseline (JSON logging, standard metrics, "
+        "OpenTelemetry tracing) is scaffolded deterministically (runtime/execution.py "
+        "_handle_observability); runtime instrumentation remains agent-native."
     ),
     "rup.phase_4_verification.4.1": (
         "Deterministic: test gates with 3-run flakiness detection in runtime/verification.py."
@@ -257,14 +259,14 @@ PROTOCOL_CAPABILITY_TRANSLATION: Dict[str, Dict[str, Any]] = {
     "rup.phase_3_execution.workstreams.containerization": {
         "modules": ["runtime.execution"],
         "symbols": ["ExecutionPhase", "_handle_container"],
-        "port_status": "not_ported",
-        "semantic_tests": ["tests/test_execution.py::test_container_iac_observability_are_not_ported"],
+        "port_status": "partial",
+        "semantic_tests": ["tests/test_execution.py::test_containerization_generates_dockerfile"],
     },
     "rup.phase_3_execution.workstreams.observability": {
         "modules": ["runtime.execution"],
         "symbols": ["ExecutionPhase", "_handle_observability"],
-        "port_status": "not_ported",
-        "semantic_tests": ["tests/test_execution.py::test_container_iac_observability_are_not_ported"],
+        "port_status": "partial",
+        "semantic_tests": ["tests/test_execution.py::test_observability_generates_baseline"],
     },
     "rup.phase_4_verification.4.1": {
         "modules": ["runtime.verification"],

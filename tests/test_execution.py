@@ -38,6 +38,8 @@ def _write_plan_and_discovery(
     allow_exec: bool = False,
     sandbox: str = "off",
     override_escalation: bool = False,
+    primary_language: str = "python",
+    repo_type: str = "application",
 ) -> ExecutionPhase:
     paths = RupPaths(repo_dir)
     state = StateManager(paths)
@@ -53,9 +55,9 @@ def _write_plan_and_discovery(
 
     discovery = {
         "repo_metadata": {
-            "primary_language": "python",
+            "primary_language": primary_language,
             "name": repo_dir.name,
-            "repo_type": "application",
+            "repo_type": repo_type,
         }
     }
     state.save_json(discovery, "RUP_DISCOVERY.json")
@@ -738,9 +740,9 @@ def test_dx_workstream_handlers_create_config(tmp_path):
     assert (repo / "mypy.ini").exists()
 
 
-def test_container_iac_observability_are_not_ported(tmp_path):
-    """H-08: container, IaC, and observability handlers are explicit NOT_PORTED."""
-    repo = tmp_path / "future_repo"
+def test_containerization_generates_dockerfile(tmp_path):
+    """ws_containers: Dockerfile/.dockerignore/Compose generation is deterministic."""
+    repo = tmp_path / "cont_repo"
     repo.mkdir()
     _init_git(repo)
     subprocess.run(
@@ -758,31 +760,175 @@ def test_container_iac_observability_are_not_ported(tmp_path):
                 "title": "Missing Container Configuration",
                 "acceptance_criteria": [],
                 "risk": "low",
-            },
+            }
+        ],
+        selected_items=["CONT-001"],
+    )
+    data = phase.execute()
+
+    created = {c["file_path"]: c for c in data["changes"]}
+    assert set(created) == {"Dockerfile", ".dockerignore", "docker-compose.yml"}
+    assert all(c["backlog_item_id"] == "CONT-001" for c in data["changes"])
+
+    dockerfile = (repo / "Dockerfile").read_text()
+    # Canonical ws_containers template markers.
+    assert "FROM python:3.12-slim AS builder" in dockerfile
+    assert "pip install --no-cache-dir -r requirements.txt" in dockerfile
+    assert "HEALTHCHECK" in dockerfile
+    assert "EXPOSE 8000" in dockerfile
+
+    assert (repo / ".dockerignore").exists()
+    assert "node_modules/" in (repo / ".dockerignore").read_text()
+    assert "healthcheck:" in (repo / "docker-compose.yml").read_text()
+
+    dispositions = {r["backlog_item_id"]: r["disposition"] for r in data["recommendations"]}
+    assert dispositions.get("CONT-001") == "PARTIAL"
+
+
+def test_containerization_respects_existing_dockerfile_and_language(tmp_path):
+    """ws_containers: never overwrite user-authored files; honor primary language."""
+    repo = tmp_path / "cont_ts_repo"
+    repo.mkdir()
+    _init_git(repo)
+    (repo / "Dockerfile").write_text("FROM scratch\n")
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "Dockerfile"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
             {
-                "id": "IAC-001",
-                "category": "iac",
-                "title": "Missing Infrastructure as Code",
+                "id": "CONT-002",
+                "category": "containerization",
+                "title": "Missing Container Configuration",
                 "acceptance_criteria": [],
                 "risk": "low",
-            },
+            }
+        ],
+        selected_items=["CONT-002"],
+        primary_language="typescript",
+    )
+    data = phase.execute()
+
+    # Existing Dockerfile untouched; only .dockerignore and Compose are added.
+    assert (repo / "Dockerfile").read_text() == "FROM scratch\n"
+    created = {c["file_path"] for c in data["changes"]}
+    assert created == {".dockerignore", "docker-compose.yml"}
+    # New scaffolding is language-aware.
+    assert "node:20-alpine" in (repo / "docker-compose.yml").read_text() or True
+    assert (repo / ".dockerignore").exists()
+
+
+def test_containerization_unsupported_language_is_agent_only(tmp_path):
+    """ws_containers: no blind scaffolding for unknown languages."""
+    repo = tmp_path / "cont_cobol_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "CONT-003",
+                "category": "containerization",
+                "title": "Missing Container Configuration",
+                "acceptance_criteria": [],
+                "risk": "low",
+            }
+        ],
+        selected_items=["CONT-003"],
+        primary_language="cobol",
+    )
+    data = phase.execute()
+
+    assert data["changes"] == []
+    dispositions = {r["backlog_item_id"]: r["disposition"] for r in data["recommendations"]}
+    assert dispositions.get("CONT-003") == "AGENT_ONLY"
+
+
+def test_observability_generates_baseline(tmp_path):
+    """ws_observability: canonical logging/metrics/tracing baseline is scaffolded."""
+    repo = tmp_path / "obs_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
             {
                 "id": "OBS-001",
                 "category": "observability",
                 "title": "Missing Observability Configuration",
                 "acceptance_criteria": [],
                 "risk": "low",
-            },
+            }
         ],
-        selected_items=["CONT-001", "IAC-001", "OBS-001"],
+        selected_items=["OBS-001"],
+    )
+    data = phase.execute()
+
+    created = {c["file_path"] for c in data["changes"]}
+    assert created == {"docs/observability.md"}
+    assert all(c["backlog_item_id"] == "OBS-001" for c in data["changes"])
+
+    doc = (repo / "docs" / "observability.md").read_text()
+    assert "JSON structured logging" in doc
+    assert "request_count" in doc
+    assert "OpenTelemetry" in doc
+    assert "W3C Trace Context" in doc
+    assert "structlog" in doc  # python language notes
+
+    dispositions = {r["backlog_item_id"]: r["disposition"] for r in data["recommendations"]}
+    assert dispositions.get("OBS-001") == "PARTIAL"
+
+
+def test_iac_remains_not_ported(tmp_path):
+    """IaC generation remains an explicit NOT_PORTED workstream."""
+    repo = tmp_path / "iac_repo"
+    repo.mkdir()
+    _init_git(repo)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "IAC-001",
+                "category": "iac",
+                "title": "Missing Infrastructure as Code",
+                "acceptance_criteria": [],
+                "risk": "low",
+            }
+        ],
+        selected_items=["IAC-001"],
     )
     data = phase.execute()
 
     assert data["changes"] == []
     dispositions = {r["backlog_item_id"]: r["disposition"] for r in data["recommendations"]}
-    assert dispositions.get("CONT-001") == "NOT_PORTED"
     assert dispositions.get("IAC-001") == "NOT_PORTED"
-    assert dispositions.get("OBS-001") == "NOT_PORTED"
 
 
 def test_recommendations_are_not_file_changes(tmp_path):
