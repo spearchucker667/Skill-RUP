@@ -6,7 +6,7 @@ compatibility: |
   Python 3.11+, Git 2.x, POSIX/Windows path support.
   Requires target repository to be a directory; external state directories must resolve inside the target.
 metadata:
-  version: "3.0.0"
+  version: "3.0.2"
   protocol_version: "3.0.0"
   canonical_commit: "c3d6f70375db15d53db2fba76d70b5b7c9cf98bb"
 ---

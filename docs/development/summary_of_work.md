@@ -2059,3 +2059,50 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
 ### Next Actions
 - Push and confirm `pulumi-validation` reaches `pulumi preview` and the
   `operations["pulumi_preview"]` assertion passes on the runner.
+
+## 2026-08-22 - Session: CI harness hardening — Terraform wrapper, Pulumi isolation, version sync
+
+### Accomplishments
+- **Native Terraform CLI in CI**: added `terraform_wrapper: false` to
+  `hashicorp/setup-terraform` in `terraform-validation` so RUP spawns the real
+  Terraform binary instead of HashiCorp's Node wrapper.
+- **Pulumi backend isolation**: moved the local file backend from
+  `target/.pulumi-state` to a sibling directory outside the repository RUP
+  analyzes, preventing test-harness contamination of discovery/security scans.
+- **Explicit Pulumi stack precondition**: before launching RUP, the workflow now
+  runs `pulumi stack select ci` and probes `pulumi stack --show-name` to assert
+  the selected stack is `ci`.
+- **Pulumi lifecycle semantic check**: the job now also rejects
+  `verification_results.overall_status == "failed"` rather than only checking
+  `pulumi_preview`.
+- **SKILL.md version sync**: updated `metadata.version` from `3.0.0` to `3.0.2`
+  so it agrees with `VERSION`, `runtime.__version__`, and the package manifest.
+- **Version-consistency regression tests**: added `tests/test_version_consistency.py`
+  proving `VERSION`, `runtime.__version__`, `SKILL.md metadata.version`, and the
+  packaged skill manifest all agree.
+- **Terraform oracle clarity**: added comments distinguishing RUP's own
+  `iac_scan` gate from the independent `terraform init/validate/checkov` oracle.
+- **Temporary concurrency change**: set `cancel-in-progress: false` in `ci.yml`
+  during the repair cycle so each push produces a complete run history instead
+  of cancelling the previous one.
+
+### Validation Results
+- `python -m pytest tests/` — **226 passed** (3 new version-consistency tests green).
+- `python scripts/forward_test.py --fixtures tests/fixtures` — 14/14 passed.
+- `python scripts/generate_schemas_templates.py --check` PASS.
+- `python scripts/generate_workflows.py --check` PASS.
+- `python scripts/build_capability_map.py --check` PASS.
+- `python scripts/audit_sources.py --check` PASS.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` — 40 valid.
+- `bandit -r runtime scripts -c bandit.yaml` — 0 issues.
+- `python -m compileall runtime scripts` — clean.
+
+### Open Blockers
+- None. The actual Terraform/Pulumi CLI paths still cannot be exercised on this
+  macOS host; fixes are validated by code review and the existing pytest suite.
+
+### Next Actions
+- Push and confirm `terraform-validation` and `pulumi-validation` pass on the
+  runner with the native CLI and isolated backend.
+- Once CI is green for a stable HEAD, consider re-enabling
+  `cancel-in-progress: true`.
