@@ -1644,3 +1644,35 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
   merge path on every push.
 - Port containerization/observability workstreams or keep them declared
   `not_ported` with reference-only workflows.
+
+## 2026-08-21 - Session: v3.0.0 Release Packaging, Changelog, and Tag
+
+### Accomplishments
+- Converted `CHANGELOG.md` `[Unreleased]` into the `[3.0.0] - 2026-08-21`
+  release entry covering all P0/P1 remediation work, with a compare link
+  anchored at the repository's first commit (no prior tags exist).
+- Rebuilt the release archive from current HEAD:
+  `python scripts/package_skill.py --version 3.0.0` produced
+  `dist/rup-skill-v3.0.0.zip` (316 files, no symlink members) and its
+  `.sha256` checksum; `--verify` passed all 316 file hashes. Sanity-checked
+  that `rollback.py`, `workspace.py`, `tool_resolution.py`, and jailed
+  `security.py` are packaged inside `rup/runtime/`.
+- Removed the stale tracked `dist/manifest.json` (leftover from an older
+  packager format; the manifest is now embedded in the archive).
+- Created annotated tag `v3.0.0` and pushed `main` + tag to origin.
+
+### Validation Results
+- `pytest tests/` 208 passed; forward fixtures 12/12.
+- `generate_schemas_templates --check` PASS, `generate_workflows --check`
+  PASS, `build_capability_map --check` PASS, `audit_sources --check` PASS
+  (12/63/51/0), `validate_rup` 40 valid, `bandit` 0 issues, `compileall` clean.
+
+### Open Blockers
+- None. GitHub Actions will still need to run the full matrix on the new
+  commits; the `release-package.yml` workflow triggers on GitHub release
+  creation (web UI action, not yet performed).
+
+### Next Actions
+- Create the GitHub release from tag `v3.0.0` to trigger
+  `release-package.yml`, which re-validates, re-packages, and uploads the
+  archive + checksum, and run `skills-ref validate` on the packaged skill.
