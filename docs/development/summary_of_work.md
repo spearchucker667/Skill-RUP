@@ -2233,3 +2233,35 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
 ### Next Actions
 - Commit and push this follow-up on local `main`, then require a completely
   green CI/Forward Tests/Validate Skill/Security Scan result at the final SHA.
+
+## 2026-08-22 - Hosted workflow closure
+
+### Accomplishments
+- Published the Windows provenance fix as
+  `f457ccedc9326f6b6d4d8c3adcd501a7c40c1945` on remote `main` and verified
+  remote `main` resolved to the same commit.
+- Confirmed every workflow triggered by that exact SHA completed successfully:
+  CI `32565532124`, Forward Tests `32565532105`, Validate Skill `32565532077`,
+  and Security Scan `32565532101`.
+- Within CI, the Ubuntu, macOS, and Windows pytest matrix, integrity, Terraform
+  validation, Pulumi validation, and aggregate `required` job all passed.
+
+### Validation Results
+- GitHub Actions CI `32565532124` — PASS, including Windows in 1m26s,
+  Terraform in 44s, Pulumi in 39s, integrity in 51s, and `required` in 3s.
+- GitHub Actions Forward Tests `32565532105` — PASS.
+- GitHub Actions Validate Skill `32565532077` — PASS.
+- GitHub Actions Security Scan `32565532101` — PASS.
+- `python scripts/check_docs.py` — FAIL on pre-existing literal-word matches in
+  historical plans, generated capability documentation, provenance rationale
+  strings (for example the upstream `TODO.md` filename), and the separate
+  `p0-remediation` worktree. The closure entry introduced none of the reported
+  strings; this check is not part of the repository's configured workflows.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` —
+  **40/40 valid** after the closure documentation update.
+
+### Open Blockers
+- None.
+
+### Next Actions
+- None required for this workflow repair.
