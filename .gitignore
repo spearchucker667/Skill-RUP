@@ -22,6 +22,8 @@ dist/package-test/
 # Runtime fixture workspaces created by forward tests
 tests/fixtures/
 
+.worktrees/
+
 # RUP State & Outputs
 .rup/
 /RUP_*.json
