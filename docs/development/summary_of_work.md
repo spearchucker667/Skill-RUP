@@ -1764,3 +1764,36 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
 - The `v3.0.0` tag predates these changes; the archive has been refreshed to
   match current HEAD, but the tag itself still points at the pre-handler
   commit. If a strict release is needed, cut a new tag or amend the release.
+
+## 2026-08-21 - Session: Port IaC workstream + release v3.0.1
+
+### Accomplishments
+- Ported `_handle_iac` from `NOT_PORTED` to a deterministic `PARTIAL` scaffold:
+  canonical Terraform baseline under `terraform/` (`main.tf` with pinned
+  `hashicorp/aws ~> 5.0` provider and a placeholder `aws_instance` resource,
+  `variables.tf`, `outputs.tf`), additive only — existing `*.tf` anywhere in the
+  work dir or a Pulumi project is never overwritten and instead routes to a
+  `PARTIAL` recommendation pointing at the canonical `iac_validator` gate
+  (validate/lint/security/cost). No execution handler remains `NOT_PORTED`.
+- Tests: `test_iac_generates_terraform_baseline`,
+  `test_iac_respects_existing_infrastructure` (replaces
+  `test_iac_remains_not_ported`).
+- Release v3.0.1: CHANGELOG entry + compare link, packaged
+  `dist/rup-skill-v3.0.1.zip` (316 files, no symlink members, SHA-256
+  `f5268748aded87541dea5dfa0daf3d7fec589a4685c242d1de808e0d00cbc67a`),
+  `--verify` passed all 316 hashes. The archive includes the containerization,
+  observability, and IaC handlers plus the CONT-001/OBS-001 discovery gaps.
+
+### Validation Results
+- `pytest tests/` 213 passed; forward fixtures 13/13.
+- `build_capability_map --check` PASS (0 not_ported); `audit_sources --check`
+  PASS (12/63/51/0); `validate_rup` 40 valid; schemas/workflows `--check` PASS;
+  `bandit` 0 issues; `compileall` clean.
+
+### Open Blockers
+- None.
+
+### Next Actions
+- Create the GitHub release from tag `v3.0.1` to trigger
+  `release-package.yml`, which re-validates, re-packages, and uploads the
+  archive + checksum, and runs `skills-ref validate`.

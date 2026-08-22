@@ -900,8 +900,8 @@ def test_observability_generates_baseline(tmp_path):
     assert dispositions.get("OBS-001") == "PARTIAL"
 
 
-def test_iac_remains_not_ported(tmp_path):
-    """IaC generation remains an explicit NOT_PORTED workstream."""
+def test_iac_generates_terraform_baseline(tmp_path):
+    """Canonical iac_validator: Terraform baseline scaffolding is deterministic."""
     repo = tmp_path / "iac_repo"
     repo.mkdir()
     _init_git(repo)
@@ -926,9 +926,57 @@ def test_iac_remains_not_ported(tmp_path):
     )
     data = phase.execute()
 
-    assert data["changes"] == []
+    created = {c["file_path"] for c in data["changes"]}
+    assert created == {"terraform/main.tf", "terraform/variables.tf", "terraform/outputs.tf"}
+    assert all(c["backlog_item_id"] == "IAC-001" for c in data["changes"])
+
+    main = (repo / "terraform" / "main.tf").read_text()
+    assert 'provider "aws"' in main
+    assert 'resource "aws_instance" "app"' in main
+    assert "variable \"service_name\"" in (repo / "terraform" / "variables.tf").read_text()
+    assert "output \"instance_id\"" in (repo / "terraform" / "outputs.tf").read_text()
+
     dispositions = {r["backlog_item_id"]: r["disposition"] for r in data["recommendations"]}
-    assert dispositions.get("IAC-001") == "NOT_PORTED"
+    assert dispositions.get("IAC-001") == "PARTIAL"
+
+
+def test_iac_respects_existing_infrastructure(tmp_path):
+    """Canonical iac_validator: existing *.tf or Pulumi config is never overwritten."""
+    repo = tmp_path / "iac_existing_repo"
+    repo.mkdir()
+    _init_git(repo)
+    (repo / "main.tf").write_text("# user-authored\n")
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "main.tf"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+    phase = _write_plan_and_discovery(
+        repo,
+        backlog=[
+            {
+                "id": "IAC-002",
+                "category": "iac",
+                "title": "Missing Infrastructure as Code",
+                "acceptance_criteria": [],
+                "risk": "low",
+            }
+        ],
+        selected_items=["IAC-002"],
+    )
+    data = phase.execute()
+
+    assert data["changes"] == []
+    assert (repo / "main.tf").read_text() == "# user-authored\n"
+    assert not (repo / "terraform").exists()
+    dispositions = {r["backlog_item_id"]: r["disposition"] for r in data["recommendations"]}
+    assert dispositions.get("IAC-002") == "PARTIAL"
 
 
 def test_recommendations_are_not_file_changes(tmp_path):

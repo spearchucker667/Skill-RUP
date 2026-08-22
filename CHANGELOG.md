@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2026-08-21
+### Changed
+- Ported the IaC handler (`_handle_iac`) from `NOT_PORTED` to a deterministic
+  `PARTIAL` scaffold: canonical Terraform baseline (`terraform/main.tf` with
+  pinned `hashicorp/aws` provider, `variables.tf`, `outputs.tf`), additive only
+  — existing `*.tf` or Pulumi projects are never overwritten. The canonical
+  `iac_validator` contract (validate/lint/security/cost) is surfaced as the
+  follow-up agent step. No execution handler remains `NOT_PORTED`.
+- Discovery emits `CONT-001` / `OBS-001` gaps (classified under the canonical
+  `performance` / `dx` dimensions) and execution routes them by gap id to the
+  `ws_containers` / `ws_observability` handlers; the `ops_workstreams` forward
+  fixture exercises both through the full CLI lifecycle.
+- Refreshed `dist/rup-skill-v3.0.0.zip` to track current HEAD.
+
 ## [3.0.0] - 2026-08-21
 ### Added
 - Complete RUP Protocol v3.0.0 synchronization.
@@ -65,3 +79,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   both handlers through the full CLI lifecycle.
 
 [3.0.0]: https://github.com/spearchucker667/Skill-RUP/compare/338c5675dab2479a3a4f2ac6d70fd0a12c250847...v3.0.0
+[3.0.1]: https://github.com/spearchucker667/Skill-RUP/compare/v3.0.0...v3.0.1

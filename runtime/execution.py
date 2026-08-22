@@ -1196,19 +1196,137 @@ public issue for security-sensitive findings.
         ]
         return changes, recommendations
 
+    # Canonical IaC tooling (protocol/rup-protocol.yaml `iac_validator` tool
+    # contract: terraform/pulumi/cloudformation/ansible/helm). The runtime
+    # scaffolds a deterministic Terraform baseline so the workstream is no
+    # longer NOT_PORTED; full provider wiring and `terraform validate`/`plan`
+    # are deferred to the agent (PARTIAL disposition). Generation is additive
+    # and never overwrites an existing Terraform configuration.
+    _TERRAFORM_MAIN_TEMPLATE = (
+        '# main.tf — canonical RUP IaC baseline\n'
+        '# Generated deterministically by the runtime; extend with real\n'
+        '# resources, remote state, and environment-specific values.\n'
+        '\n'
+        'terraform {\n'
+        '  required_providers {\n'
+        '    aws = {\n'
+        '      source  = "hashicorp/aws"\n'
+        '      version = "~> 5.0"\n'
+        '    }\n'
+        '  }\n'
+        '}\n'
+        '\n'
+        'provider "aws" {\n'
+        '  region = var.region\n'
+        '}\n'
+        '\n'
+        '# Replace with the actual infrastructure for this service.\n'
+        'resource "aws_instance" "app" {\n'
+        '  ami           = var.ami_id\n'
+        '  instance_type = var.instance_type\n'
+        '\n'
+        '  tags = {\n'
+        '    Name        = var.service_name\n'
+        '    ManagedBy   = "terraform"\n'
+        '  }\n'
+        '}\n'
+    )
+
+    _TERRAFORM_VARIABLES_TEMPLATE = (
+        'variable "region" {\n'
+        '  description = "AWS region"\n'
+        '  type        = string\n'
+        '  default     = "us-east-1"\n'
+        '}\n'
+        '\n'
+        'variable "service_name" {\n'
+        '  description = "Service name for resource tagging"\n'
+        '  type        = string\n'
+        '}\n'
+        '\n'
+        'variable "ami_id" {\n'
+        '  description = "AMI identifier for the application instance"\n'
+        '  type        = string\n'
+        '}\n'
+        '\n'
+        'variable "instance_type" {\n'
+        '  description = "EC2 instance type"\n'
+        '  type        = string\n'
+        '  default     = "t3.micro"\n'
+        '}\n'
+    )
+
+    _TERRAFORM_OUTPUTS_TEMPLATE = (
+        'output "instance_id" {\n'
+        '  description = "ID of the application instance"\n'
+        '  value       = aws_instance.app.id\n'
+        '}\n'
+        '\n'
+        'output "public_ip" {\n'
+        '  description = "Public IP of the application instance"\n'
+        '  value       = aws_instance.app.public_ip\n'
+        '}\n'
+    )
+
     def _handle_iac(
         self, item: Dict[str, Any], subtype: str
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Scaffold a deterministic Terraform baseline (canonical iac_validator).
+
+        Additive only: an existing `*.tf` anywhere in the work dir (or a
+        Pulumi project) is treated as user-authored infrastructure and is never
+        overwritten. Provider wiring, remote state, and `terraform
+        validate`/`plan` execution are deferred to the agent, so the workstream
+        reports PARTIAL.
+        """
         item_id = item.get("id", "")
-        return [], [
+        existing = list(self._work_dir.glob("*.tf")) + list(
+            self._work_dir.glob("terraform/**/*.tf")
+        )
+        has_pulumi = (self._work_dir / "Pulumi.yaml").exists() or (
+            self._work_dir / "Pulumi.yml").exists()
+        if existing or has_pulumi:
+            return [], [
+                self._recommendation(
+                    item_id,
+                    subtype,
+                    "PARTIAL",
+                    "Existing Infrastructure-as-Code detected; run the iac_validator "
+                    "gate (terraform validate / plan) instead of scaffolding a new baseline.",
+                )
+            ]
+
+        changes: List[Dict[str, Any]] = []
+        files = {
+            "terraform/main.tf": self._TERRAFORM_MAIN_TEMPLATE,
+            "terraform/variables.tf": self._TERRAFORM_VARIABLES_TEMPLATE,
+            "terraform/outputs.tf": self._TERRAFORM_OUTPUTS_TEMPLATE,
+        }
+        for rel, content in files.items():
+            path = self._handler_path(rel)
+            if path.exists():
+                continue
+            self._mkdir_target("terraform")
+            self._write_target(rel, content)
+            changes.append(
+                {
+                    "file_path": rel,
+                    "change_type": "create",
+                    "rationale": "Generated canonical Terraform IaC baseline (provider, variables, outputs)",
+                    "backlog_item_id": item_id,
+                }
+            )
+
+        recommendations = [
             self._recommendation(
                 item_id,
                 subtype,
-                "NOT_PORTED",
-                "Infrastructure-as-Code generation is not ported to the deterministic runtime; "
-                "author manually or extend the runtime with an IaC workstream handler.",
+                "PARTIAL",
+                "Scaffolded canonical Terraform baseline; wire real resources and "
+                "run terraform validate/plan before applying.",
             )
         ]
+        return changes, recommendations
 
     # Canonical Phase-2 observability workstream (ws_observability): JSON
     # structured logging, standard RED/USE metrics, and OpenTelemetry tracing
