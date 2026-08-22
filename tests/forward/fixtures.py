@@ -186,7 +186,7 @@ def build_pulumi_project(target_dir: Path) -> None:
     )
     _write(
         target_dir / "requirements.txt",
-        "pulumi>=3.0\n",
+        "pulumi==3.150.0\n",
     )
     _write(
         target_dir / "tests" / "test_demo.py",

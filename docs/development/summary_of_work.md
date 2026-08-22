@@ -1977,3 +1977,54 @@ Fourth pass of the day; closed the four follow-up items against HEAD `8431596`.
 - Push the branch and confirm the `pulumi-validation`, `terraform-validation`,
   `required`, and `validate-skill` CI jobs pass on the runner.
 - If Pulumi v6 action SHA ages out, evaluate v7 separately from functional fixes.
+
+## 2026-08-22 - Session: Fix invalid action SHAs / package pins and lifecycle result validation
+
+### Accomplishments
+- **Checkov pin correction**: `terraform-validation` now installs `checkov==3.3.9`
+  (the latest available 3.3.x release), replacing the nonexistent `3.3.13`.
+- **CodeQL SHA fix**: `security-scan.yml` now points to the verified
+  `github/codeql-action` v4.37.4 commit
+  `f205ea1c3313d32999d8d6a48b4f6530d4437b38` for both `init` and `analyze`,
+  replacing the nonexistent previous SHA.
+- **Action runtime modernization**: pinned `hashicorp/setup-terraform` to
+  v4.0.1 (`dfe3c3f87815947d99a8997f908cb6525fc44e9e`, Node 24 runtime) and
+  `pulumi/actions` to v7.0.0 (`8e5e406f4007fca908480587cb9893c07090f58d`,
+  Node 24 runtime).
+- **Pulumi version alignment**: the `pulumi_project` fixture now pins the
+  Python SDK to `pulumi==3.150.0`, matching the CLI version installed in CI.
+- **Terraform CI semantic validation**: the job no longer ignores the RUP
+  lifecycle exit code. It now reads `RUP_VERIFICATION.json`, rejects an overall
+  `failed` status, and explicitly asserts `iac_scan.executed` and
+  `iac_scan.passed` before falling through to the independent `terraform init`,
+  `terraform validate`, and `checkov` checks.
+- **Release tag invariant**: `release-package.yml` now compares the release tag
+  version against `VERSION` and fails the workflow if they mismatch, preventing
+  a release whose packaged manifest disagrees with the repository source of
+  truth.
+
+### Validation Results
+- `python -m pytest tests/` — 223 passed.
+- `python scripts/forward_test.py --fixtures tests/fixtures` — 14/14 passed.
+- `python scripts/generate_schemas_templates.py --check` PASS.
+- `python scripts/generate_workflows.py --check` PASS.
+- `python scripts/build_capability_map.py --check` PASS.
+- `python scripts/audit_sources.py --check` PASS.
+- `python scripts/validate_rup.py --schema protocol/rup-schema.json all .` — 40 valid.
+- `bandit -r runtime scripts -c bandit.yaml` — 0 issues.
+- `python -m compileall runtime scripts` — clean.
+- Verified via GitHub API that the new CodeQL, setup-terraform, and pulumi
+  action SHAs exist and match the reported versions.
+- Verified via `pip index versions checkov` that `3.3.9` exists and `3.3.13`
+  does not.
+
+### Open Blockers
+- None. The Pulumi and Terraform CLI paths still cannot be exercised on this
+  macOS host because those CLIs are not installed locally; the fixes are
+  validated by code review, YAML/SHA verification, and the existing pytest
+  suite.
+
+### Next Actions
+- Push the branch and confirm `terraform-validation`, `pulumi-validation`,
+  `required`, `Security Scan / CodeQL`, and `Release Package` (if triggered)
+  pass on the runner.

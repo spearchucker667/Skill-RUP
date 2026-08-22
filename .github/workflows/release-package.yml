@@ -51,10 +51,15 @@ jobs:
         id: package
         shell: bash
         run: |
-          VERSION="${TAG_NAME#v}"
+          TAG_VERSION="${TAG_NAME#v}"
+          REPO_VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [ "$TAG_VERSION" != "$REPO_VERSION" ]; then
+            echo "::error::Release tag ${TAG_NAME} does not match VERSION ${REPO_VERSION}"
+            exit 1
+          fi
           PACKAGE_NAME="rup-skill-${TAG_NAME}.zip"
           python scripts/package_skill.py \
-            --version "${VERSION}" \
+            --version "${TAG_VERSION}" \
             --output "dist/${PACKAGE_NAME}"
           echo "package_name=${PACKAGE_NAME}" >> "$GITHUB_OUTPUT"
 
